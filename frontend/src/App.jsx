@@ -1,20 +1,34 @@
-import { useEffect, useState } from 'react';
-import { apiRequest } from './lib/api';
+import { Navigate, Route, BrowserRouter, Routes } from 'react-router-dom';
+import { AuthProvider } from './lib/AuthContext';
+import { ThemeProvider } from './lib/ThemeContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { LoginPage } from './pages/LoginPage';
+import { MfaVerifyPage } from './pages/MfaVerifyPage';
+import { MfaEnrollPage } from './pages/MfaEnrollPage';
+import { DashboardPage } from './pages/DashboardPage';
 
 function App() {
-  const [backendStatus, setBackendStatus] = useState('checking...');
-
-  useEffect(() => {
-    apiRequest('/healthz')
-      .then(() => setBackendStatus('reachable'))
-      .catch(() => setBackendStatus('unreachable'));
-  }, []);
-
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-2">
-      <h1 className="text-2xl font-semibold">OpenCAI</h1>
-      <p className="text-sm text-gray-500">Backend: {backendStatus}</p>
-    </div>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/mfa/verify" element={<MfaVerifyPage />} />
+            <Route path="/mfa/enroll" element={<MfaEnrollPage />} />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

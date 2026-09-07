@@ -1,9 +1,32 @@
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-export async function apiRequest(path, options = {}) {
-  const res = await fetch(`${API_BASE_URL}${path}`, options);
-  if (!res.ok) {
-    throw new Error(`Request to ${path} failed with status ${res.status}`);
+export class ApiError extends Error {
+  constructor(status, code, message) {
+    super(message);
+    this.status = status;
+    this.code = code;
   }
-  return res.json();
+}
+
+export async function apiRequest(path, { method = 'GET', body, token } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      data?.error?.code || 'UNKNOWN_ERROR',
+      data?.error?.message || `Request failed with status ${res.status}`,
+    );
+  }
+
+  return data;
 }

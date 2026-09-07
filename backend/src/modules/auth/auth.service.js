@@ -32,9 +32,19 @@ function verifyToken(token, expectedPurpose, errorCode) {
   }
 }
 
+// epochTolerance is in seconds (not steps, despite the name pattern elsewhere
+// in otplib) -- 30 allows the previous or next 30-second step, absorbing
+// clock drift and the time a person takes to read and type a code.
+const TOTP_EPOCH_TOLERANCE_SECONDS = 30;
+
 async function verifyTotpCode(secret, code) {
   try {
-    const result = await otplib.verify({ secret, token: code, strategy: 'totp' });
+    const result = await otplib.verify({
+      secret,
+      token: code,
+      strategy: 'totp',
+      epochTolerance: TOTP_EPOCH_TOLERANCE_SECONDS,
+    });
     return result.valid;
   } catch {
     // otplib throws on malformed input (e.g. a non-6-digit backup code)
