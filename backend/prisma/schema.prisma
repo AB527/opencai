@@ -10,4 +10,200 @@ datasource db {
   provider = "postgresql"
 }
 
-// No models yet -- added in Phase 1 (Data model).
+enum UserRole {
+  ADMIN
+  OPERATOR
+}
+
+// CSP is AWS-only today; adding a provider later is just a new enum value.
+enum CloudServiceProvider {
+  AWS
+}
+
+enum ChatMode {
+  AIOPS
+  FINOPS
+}
+
+enum FinOpsSubMode {
+  TAG_COMPLIANCE
+  COST_ANALYTICS
+  WASTE_MANAGEMENT
+  COST_OPTIMISATION
+}
+
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum ChatMessageKind {
+  TEXT
+  LOOKUP_REQUEST
+  COMMAND_REQUEST
+  COMMAND_RESULT
+}
+
+model User {
+  id                  String   @id @default(cuid())
+  username            String   @unique
+  passwordHash        String
+  role                UserRole
+  isActive            Boolean  @default(true)
+  // Envelope-encrypted TOTP secret (backend/src/crypto/); null until enrolled.
+  totpSecretEncrypted String?
+  // Hashed one-time recovery codes; a code is removed from this list once redeemed.
+  backupCodesHashed   String[] @default([])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organisations UserOrganisation[]
+  chatSessions  ChatSession[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+// Join table: which Organisation(s) an Operator can access.
+model UserOrganisation {
+  id             String   @id @default(cuid())
+  userId         String
+  organisationId String
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organisationId])
+  @@map("user_organisations")
+}
+
+// Singleton row: this deployment's own white-label branding (not per-Organisation).
+model InstanceBranding {
+  id                  String   @id @default(cuid())
+  displayName         String
+  logoObjectKey       String?
+  loginImageObjectKey String?
+  updatedAt           DateTime @updatedAt
+
+  @@map("instance_branding")
+}
+
+// A client business managed by this instance.
+model Organisation {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userOrganisations UserOrganisation[]
+  workspaces        Workspace[]
+
+  @@map("organisations")
+}
+
+// Organisation -> CSP -> Account -> Environment.
+model Workspace {
+  id             String               @id @default(cuid())
+  organisationId String
+  csp            CloudServiceProvider
+  account        String
+  environment    String
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organisation Organisation         @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  credential   WorkspaceCredential?
+  chatSessions ChatSession[]
+  auditLogs    AuditLog[]
+
+  @@unique([organisationId, csp, account, environment])
+  @@map("workspaces")
+}
+
+model WorkspaceCredential {
+  id          String   @id @default(cuid())
+  workspaceId String   @unique
+  // Envelope-encrypted JSON blob of CSP-specific fields (e.g. AWS access key
+  // id/secret), produced by backend/src/crypto/. Never stored in plaintext.
+  encryptedCredentials String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_credentials")
+}
+
+// Selected model + related chat config. Singleton row, enforced at the service layer.
+model ChatSettings {
+  id        String   @id @default(cuid())
+  provider  String
+  model     String
+  config    Json?
+  updatedAt DateTime @updatedAt
+
+  @@map("chat_settings")
+}
+
+model ChatSession {
+  id          String         @id @default(cuid())
+  userId      String
+  workspaceId String
+  mode        ChatMode
+  subMode     FinOpsSubMode?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user      User          @relation(fields: [userId], references: [id])
+  workspace Workspace     @relation(fields: [workspaceId], references: [id])
+  messages  ChatMessage[]
+
+  @@index([userId])
+  @@index([workspaceId])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String          @id @default(cuid())
+  sessionId String
+  role      ChatMessageRole
+  kind      ChatMessageKind @default(TEXT)
+  // Natural-language text, or the literal command/lookup string proposed.
+  content   String
+  // Sanitized stdout/stderr for command or lookup results.
+  commandOutput String?
+  // Free-form lifecycle state (e.g. pending_confirmation/confirmed/cancelled/
+  // executed/failed) -- kept as a string since the exact vocabulary is defined
+  // by the Phase 6 agent execution flow, not the data model.
+  status    String?
+  createdAt DateTime        @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("chat_messages")
+}
+
+// Independent of chat history so it survives even if a session/user/workspace
+// is later removed -- actor/workspace are nulled out, never cascade-deleted.
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  workspaceId String?
+  action      String
+  outcome     String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  actor     User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([workspaceId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
