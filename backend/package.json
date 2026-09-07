@@ -1,0 +1,36 @@
+{
+  "name": "opencai-backend",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": "^20.19 || ^22.12 || >=24.0"
+  },
+  "scripts": {
+    "dev": "nodemon",
+    "start": "node src/server.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "postinstall": "prisma generate",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "test": "echo \"(no tests yet -- Phase 2 adds crypto/ unit tests)\" && exit 0"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "@prisma/client": "^7.10.0",
+    "@prisma/adapter-pg": "^7.10.0",
+    "pg": "^8.23.0",
+    "dotenv": "^17.4.2",
+    "cors": "^2.8.6",
+    "helmet": "^8.3.0"
+  },
+  "devDependencies": {
+    "prisma": "7.10.0",
+    "nodemon": "^3.1.14",
+    "eslint": "^10.10.0",
+    "@eslint/js": "^10.0.1",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.6"
+  }
+}

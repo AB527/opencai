@@ -1,0 +1,13 @@
+// Deliberately using the legacy "prisma-client-js" generator, NOT the new default
+// "prisma-client" generator: as of Prisma 7 the new generator emits TypeScript-only
+// output with no compiled JS entry point, which breaks this project's "plain
+// JavaScript, no build step" constraint. Do not switch this to "prisma-client".
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// No models yet -- added in Phase 1 (Data model).
