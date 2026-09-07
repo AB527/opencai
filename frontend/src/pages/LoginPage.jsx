@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import logo from '../assets/opencai-logo.png';
+import defaultLogo from '../assets/opencai-logo.png';
 import { useAuth } from '../lib/AuthContext';
 import { login } from '../lib/authApi';
+import { useBranding } from '../lib/useBranding';
 import { SparkleIcon } from '../components/icons';
 
 export function LoginPage() {
   const { token } = useAuth();
   const navigate = useNavigate();
+  const branding = useBranding();
+  const logo = branding.logoObjectKey || defaultLogo;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -34,11 +37,20 @@ export function LoginPage() {
   return (
     <div className="flex min-h-screen items-stretch bg-gray-100 p-4 dark:bg-gray-950 lg:p-6">
       <div className="hidden lg:flex lg:w-1/2 lg:pr-4">
-        <div className="relative w-full overflow-hidden rounded-3xl bg-gradient-to-br from-teal-900 via-slate-900 to-blue-950">
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:56px_56px]" />
+        <div
+          className="relative w-full overflow-hidden rounded-3xl bg-gradient-to-br from-teal-900 via-slate-900 to-blue-950 bg-cover bg-center"
+          style={
+            branding.loginImageObjectKey
+              ? { backgroundImage: `url(${branding.loginImageObjectKey})` }
+              : undefined
+          }
+        >
+          {!branding.loginImageObjectKey && (
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:56px_56px]" />
+          )}
           <div className="absolute inset-0 flex items-center justify-center p-8">
             <div className="rounded-2xl bg-white px-10 py-8 shadow-xl">
-              <img src={logo} alt="OpenCAI" className="h-14 w-auto" />
+              <img src={logo} alt={branding.displayName} className="h-14 w-auto" />
             </div>
           </div>
         </div>
@@ -52,7 +64,7 @@ export function LoginPage() {
               AGENTIC CLOUDOPS
             </span>
             <div className="rounded-xl bg-white p-1.5 shadow ring-1 ring-gray-100 dark:ring-gray-700">
-              <img src={logo} alt="OpenCAI" className="h-8 w-auto" />
+              <img src={logo} alt={branding.displayName} className="h-8 w-auto" />
             </div>
           </div>
 

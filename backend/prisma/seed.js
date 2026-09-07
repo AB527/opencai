@@ -4,8 +4,8 @@ const bcrypt = require('bcryptjs');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const { ROLES } = require('../src/constants/roles');
+const { MASTER_ADMIN_USERNAME } = require('../src/constants/admin');
 
-const MASTER_ADMIN_USERNAME = 'admin';
 const BCRYPT_COST = 12;
 
 async function main() {

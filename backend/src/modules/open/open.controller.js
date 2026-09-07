@@ -1,4 +1,4 @@
-const { checkDatabaseConnection } = require('./open.service');
+const { checkDatabaseConnection, getInstanceBranding } = require('./open.service');
 
 function healthz(req, res) {
   res.status(200).json({ status: 'ok' });
@@ -13,4 +13,12 @@ async function readyz(req, res) {
   }
 }
 
-module.exports = { healthz, readyz };
+async function branding(req, res, next) {
+  try {
+    res.json(await getInstanceBranding());
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { healthz, readyz, branding };

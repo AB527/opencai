@@ -4,7 +4,11 @@ const helmet = require('helmet');
 const config = require('./config/env');
 const openRoute = require('./modules/open/open.route');
 const authRoute = require('./modules/auth/auth.route');
+const adminRoute = require('./modules/admin/admin.route');
 const { errorHandler } = require('./middleware/errorHandler');
+const { requireAuth } = require('./middleware/auth');
+const { requireRole } = require('./middleware/rbac');
+const { ROLES } = require('./constants/roles');
 
 const app = express();
 
@@ -16,6 +20,7 @@ app.use(express.json());
 // Application routes mount under /api/* starting in Phase 2.
 app.use(openRoute);
 app.use('/api/auth', authRoute);
+app.use('/api/admin', requireAuth, requireRole(ROLES.ADMIN), adminRoute);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found' });
