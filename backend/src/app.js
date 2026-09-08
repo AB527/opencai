@@ -5,6 +5,8 @@ const config = require('./config/env');
 const openRoute = require('./modules/open/open.route');
 const authRoute = require('./modules/auth/auth.route');
 const adminRoute = require('./modules/admin/admin.route');
+const operatorRoute = require('./modules/operator/operator.route');
+const chatRoute = require('./modules/chat/chat.route');
 const { errorHandler } = require('./middleware/errorHandler');
 const { requireAuth } = require('./middleware/auth');
 const { requireRole } = require('./middleware/rbac');
@@ -21,6 +23,8 @@ app.use(express.json());
 app.use(openRoute);
 app.use('/api/auth', authRoute);
 app.use('/api/admin', requireAuth, requireRole(ROLES.ADMIN), adminRoute);
+app.use('/api/operator', requireAuth, requireRole(ROLES.OPERATOR), operatorRoute);
+app.use('/api/chat', requireAuth, requireRole(ROLES.OPERATOR), chatRoute);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found' });

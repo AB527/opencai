@@ -1,0 +1,14 @@
+// Mirrors the Prisma ChatMode / FinOpsSubMode enums.
+const CHAT_MODES = Object.freeze({
+  AIOPS: 'AIOPS',
+  FINOPS: 'FINOPS',
+});
+
+const FINOPS_SUB_MODES = Object.freeze({
+  TAG_COMPLIANCE: 'TAG_COMPLIANCE',
+  COST_ANALYTICS: 'COST_ANALYTICS',
+  WASTE_MANAGEMENT: 'WASTE_MANAGEMENT',
+  COST_OPTIMISATION: 'COST_OPTIMISATION',
+});
+
+module.exports = { CHAT_MODES, FINOPS_SUB_MODES };

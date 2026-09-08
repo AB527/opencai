@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 import { decodeJwtPayload, isTokenExpired } from './jwt';
+import { WORKSPACE_STORAGE_KEY } from './WorkspaceContext';
 
 const TOKEN_STORAGE_KEY = 'opencai_token';
 
@@ -28,6 +29,7 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(WORKSPACE_STORAGE_KEY);
     setToken(null);
   };
 
