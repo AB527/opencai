@@ -11,3 +11,18 @@ export const listChatSessions = (token, params = {}) => {
 };
 
 export const getChatSession = (token, id) => apiRequest(`/api/chat/sessions/${id}`, { token });
+
+export const sendChatMessage = (token, sessionId, text) =>
+  apiRequest(`/api/chat/sessions/${sessionId}/messages`, { method: 'POST', token, body: { text } });
+
+export const confirmChatMessage = (token, sessionId, messageId) =>
+  apiRequest(`/api/chat/sessions/${sessionId}/messages/${messageId}/confirm`, {
+    method: 'POST',
+    token,
+  });
+
+export const cancelChatMessage = (token, sessionId, messageId) =>
+  apiRequest(`/api/chat/sessions/${sessionId}/messages/${messageId}/cancel`, {
+    method: 'POST',
+    token,
+  });

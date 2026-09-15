@@ -44,6 +44,10 @@ export const setWorkspaceCredential = (token, orgId, workspaceId, body) =>
 export const getChatSettings = (token) => apiRequest('/api/admin/chat-settings', { token });
 export const updateChatSettings = (token, body) =>
   apiRequest('/api/admin/chat-settings', { method: 'PUT', token, body });
+export const listAgentPersonas = (token) =>
+  apiRequest('/api/admin/chat-settings/personas', { token });
+export const updateAgentPersona = (token, body) =>
+  apiRequest('/api/admin/chat-settings/personas', { method: 'PUT', token, body });
 
 // Branding
 export const getBranding = () => apiRequest('/branding');
