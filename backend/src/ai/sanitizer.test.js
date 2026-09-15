@@ -170,7 +170,47 @@ test('returns the empty string unchanged', () => {
   assert.equal(sanitizeOutput(''), '');
 });
 
-test('returns a non-string input unchanged rather than throwing', () => {
-  assert.equal(sanitizeOutput(null), null);
-  assert.equal(sanitizeOutput(undefined), undefined);
+// --- non-string input must fail closed, never pass through -----------------
+//
+// child_process stdout/stderr are Buffers unless the caller sets an encoding.
+// Returning a non-string input unchanged would hand back every secret in it
+// intact while looking, at the call site, like a successful sanitize.
+
+test('redacts secrets in a Buffer input instead of returning it unredacted', () => {
+  const buf = Buffer.from('key is AKIAIOSFODNN7EXAMPLE here', 'utf8');
+  const out = sanitizeOutput(buf);
+  assert.equal(typeof out, 'string');
+  assert.equal(out, 'key is [REDACTED] here');
+  assert.ok(!out.includes('AKIAIOSFODNN7EXAMPLE'));
+});
+
+test('applies every rule to Buffer input, not just the access-key rule', () => {
+  const input = [
+    '-----BEGIN PRIVATE KEY-----',
+    'MIIEowIBAAKCAQEAsecretbody',
+    '-----END PRIVATE KEY-----',
+    '{"SecretAccessKey": "wJalrXUtnFEMI"}',
+    'aws_session_token = FQoGZXIvYXdz',
+  ].join('\n');
+  const out = sanitizeOutput(Buffer.from(input, 'utf8'));
+  assert.equal(
+    out,
+    [
+      '[REDACTED PRIVATE KEY]',
+      '{"SecretAccessKey": "[REDACTED]"}',
+      'aws_session_token = [REDACTED]',
+    ].join('\n'),
+  );
+  assert.ok(!out.includes('MIIEowIBAAKCAQEAsecretbody'));
+  assert.ok(!out.includes('wJalrXUtnFEMI'));
+  assert.ok(!out.includes('FQoGZXIvYXdz'));
+});
+
+test('always returns a string, coercing other non-string inputs', () => {
+  assert.equal(sanitizeOutput(null), 'null');
+  assert.equal(sanitizeOutput(undefined), 'undefined');
+  assert.equal(sanitizeOutput(42), '42');
+  for (const value of [null, undefined, 42, {}, [], true]) {
+    assert.equal(typeof sanitizeOutput(value), 'string');
+  }
 });

@@ -15,15 +15,19 @@ const REDACTED = '[REDACTED]';
  * carries a mutable `lastIndex`, and leaking that state between calls would
  * silently skip secrets on subsequent invocations.
  *
- * @param {string} text
+ * Non-string input is coerced rather than passed through. This matters:
+ * child_process stdout/stderr are Buffers unless the caller sets an encoding,
+ * and handing a Buffer straight back would return every secret in it intact
+ * while looking, at the call site, exactly like a successful sanitize.
+ * String(buffer) decodes UTF-8, so the redaction rules below genuinely apply.
+ * Always returning a string also matches this function's declared contract.
+ *
+ * @param {string|Buffer|*} text
  * @returns {string}
  */
 function sanitizeOutput(text) {
-  if (typeof text !== 'string') {
-    return text;
-  }
-
-  let result = text;
+  // Coerce, never pass through: failing open here would leak whole secrets.
+  let result = typeof text === 'string' ? text : String(text);
 
   // 1. AWS access key IDs (long-lived AKIA..., temporary ASIA...).
   result = result.replace(/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, REDACTED);
