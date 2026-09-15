@@ -7,4 +7,8 @@ const createSessionSchema = z.object({
   subMode: z.enum(Object.values(FINOPS_SUB_MODES)).optional(),
 });
 
-module.exports = { createSessionSchema };
+const sendMessageSchema = z.object({
+  text: z.string().min(1).max(4000),
+});
+
+module.exports = { createSessionSchema, sendMessageSchema };

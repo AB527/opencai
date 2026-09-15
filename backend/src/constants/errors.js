@@ -18,6 +18,13 @@ const ERROR_CODES = Object.freeze({
   // Thrown with HTTP 409 when a confirm/cancel loses the race for a command
   // that is no longer PENDING_CONFIRMATION (already confirmed, cancelled, ...).
   COMMAND_ALREADY_RESOLVED: 'COMMAND_ALREADY_RESOLVED',
+  // Thrown with HTTP 409 when a session already has an unresolved
+  // PENDING_CONFIRMATION message -- a new message can't be sent until it's
+  // resolved (confirmed or cancelled).
+  PENDING_COMMAND_EXISTS: 'PENDING_COMMAND_EXISTS',
+  // Thrown with HTTP 422 when the session's Workspace has no
+  // WorkspaceCredential configured yet -- nothing to inject into the sandbox.
+  WORKSPACE_CREDENTIAL_MISSING: 'WORKSPACE_CREDENTIAL_MISSING',
 });
 
 const ERROR_MESSAGES = Object.freeze({
@@ -35,6 +42,10 @@ const ERROR_MESSAGES = Object.freeze({
   [ERROR_CODES.AI_PROVIDER_NOT_CONFIGURED]:
     'No AI provider is configured yet. An administrator needs to set one up in Manage Chat Settings.',
   [ERROR_CODES.COMMAND_ALREADY_RESOLVED]: 'This command has already been confirmed or cancelled.',
+  [ERROR_CODES.PENDING_COMMAND_EXISTS]:
+    'This session already has a command awaiting confirmation. Resolve it before sending another message.',
+  [ERROR_CODES.WORKSPACE_CREDENTIAL_MISSING]:
+    'This Workspace has no cloud credentials configured yet. An administrator needs to add them before chat can run commands.',
 });
 
 module.exports = { ERROR_CODES, ERROR_MESSAGES };

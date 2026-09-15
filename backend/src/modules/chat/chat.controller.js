@@ -27,4 +27,28 @@ async function getOne(req, res, next) {
   }
 }
 
-module.exports = { create, list, getOne };
+async function sendMessage(req, res, next) {
+  try {
+    res.status(201).json(await service.sendMessage(req.user.id, req.params.id, req.body.text));
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function confirmMessage(req, res, next) {
+  try {
+    res.json(await service.confirmPendingCommand(req.user.id, req.params.id, req.params.messageId));
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function cancelMessage(req, res, next) {
+  try {
+    res.json(await service.cancelPendingCommand(req.user.id, req.params.id, req.params.messageId));
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { create, list, getOne, sendMessage, confirmMessage, cancelMessage };
