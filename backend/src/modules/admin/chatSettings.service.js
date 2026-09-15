@@ -1,15 +1,30 @@
 const prisma = require('../../config/db');
+const envelope = require('../../crypto/envelope');
+
+function toPublicShape(row) {
+  if (!row) return null;
+  const { providerApiKeyEncrypted, ...rest } = row;
+  return { ...rest, hasApiKey: Boolean(providerApiKeyEncrypted) };
+}
 
 async function getChatSettings() {
-  return prisma.chatSettings.findFirst({ orderBy: { updatedAt: 'desc' } });
+  const row = await prisma.chatSettings.findFirst({ orderBy: { updatedAt: 'desc' } });
+  return toPublicShape(row);
 }
 
 async function updateChatSettings(data) {
-  const existing = await prisma.chatSettings.findFirst();
-  if (existing) {
-    return prisma.chatSettings.update({ where: { id: existing.id }, data });
+  const { apiKey, ...rest } = data;
+  const updateData = { ...rest };
+  if (apiKey) {
+    updateData.providerApiKeyEncrypted = envelope.encrypt(apiKey);
   }
-  return prisma.chatSettings.create({ data });
+
+  const existing = await prisma.chatSettings.findFirst();
+  const row = existing
+    ? await prisma.chatSettings.update({ where: { id: existing.id }, data: updateData })
+    : await prisma.chatSettings.create({ data: updateData });
+
+  return toPublicShape(row);
 }
 
 module.exports = { getChatSettings, updateChatSettings };
