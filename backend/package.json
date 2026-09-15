@@ -35,7 +35,8 @@
     "qrcode": "^1.5.4",
     "zod": "^4.5.4",
     "@aws-sdk/client-s3": "^3.1127.0",
-    "multer": "^2.3.0"
+    "multer": "^2.3.0",
+    "shell-quote": "^1.10.0"
   },
   "devDependencies": {
     "prisma": "7.10.0",
