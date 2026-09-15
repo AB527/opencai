@@ -45,6 +45,11 @@ enum ChatMessageKind {
   COMMAND_RESULT
 }
 
+enum AiProvider {
+  ANTHROPIC
+  OPENAI
+}
+
 model User {
   id                  String   @id @default(cuid())
   username            String   @unique
@@ -125,13 +130,13 @@ model Workspace {
 }
 
 model WorkspaceCredential {
-  id          String   @id @default(cuid())
-  workspaceId String   @unique
+  id                   String   @id @default(cuid())
+  workspaceId          String   @unique
   // Envelope-encrypted JSON blob of CSP-specific fields (e.g. AWS access key
   // id/secret), produced by backend/src/crypto/. Never stored in plaintext.
   encryptedCredentials String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -140,27 +145,40 @@ model WorkspaceCredential {
 
 // Selected model + related chat config. Singleton row, enforced at the service layer.
 model ChatSettings {
-  id        String   @id @default(cuid())
-  provider  String
-  model     String
-  config    Json?
-  updatedAt DateTime @updatedAt
+  id                                   String      @id @default(cuid())
+  provider                             AiProvider?
+  model                                String
+  config                               Json?
+  providerApiKeyEncrypted              String?
+  baseUrl                              String?
+  maxMutatingCommandsPerSessionDefault Int         @default(10)
+  sandboxCommandTimeoutSeconds         Int         @default(60)
+  sandboxIdleTimeoutMinutes            Int         @default(30)
+  spendCeilingUsd                      Decimal?    @db.Decimal(12, 2)
+  updatedAt                            DateTime    @updatedAt
 
   @@map("chat_settings")
 }
 
 model ChatSession {
-  id          String         @id @default(cuid())
-  userId      String
-  workspaceId String
-  mode        ChatMode
-  subMode     FinOpsSubMode?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id                   String         @id @default(cuid())
+  userId               String
+  workspaceId          String
+  mode                 ChatMode
+  subMode              FinOpsSubMode?
+  sandboxContainerId   String?
+  sandboxStatus        String?
+  sandboxCreatedAt     DateTime?
+  sandboxExpiresAt     DateTime?
+  mutatingCommandCap   Int            @default(10)
+  mutatingCommandCount Int            @default(0)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
   user      User          @relation(fields: [userId], references: [id])
   workspace Workspace     @relation(fields: [workspaceId], references: [id])
   messages  ChatMessage[]
+  auditLogs AuditLog[]
 
   @@index([userId])
   @@index([workspaceId])
@@ -168,19 +186,19 @@ model ChatSession {
 }
 
 model ChatMessage {
-  id        String          @id @default(cuid())
-  sessionId String
-  role      ChatMessageRole
-  kind      ChatMessageKind @default(TEXT)
+  id            String          @id @default(cuid())
+  sessionId     String
+  role          ChatMessageRole
+  kind          ChatMessageKind @default(TEXT)
   // Natural-language text, or the literal command/lookup string proposed.
-  content   String
+  content       String
   // Sanitized stdout/stderr for command or lookup results.
   commandOutput String?
   // Free-form lifecycle state (e.g. pending_confirmation/confirmed/cancelled/
   // executed/failed) -- kept as a string since the exact vocabulary is defined
   // by the Phase 6 agent execution flow, not the data model.
-  status    String?
-  createdAt DateTime        @default(now())
+  status        String?
+  createdAt     DateTime        @default(now())
 
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
@@ -191,19 +209,38 @@ model ChatMessage {
 // Independent of chat history so it survives even if a session/user/workspace
 // is later removed -- actor/workspace are nulled out, never cascade-deleted.
 model AuditLog {
-  id          String   @id @default(cuid())
-  actorUserId String?
-  workspaceId String?
-  action      String
-  outcome     String?
-  metadata    Json?
-  createdAt   DateTime @default(now())
+  id            String   @id @default(cuid())
+  actorUserId   String?
+  workspaceId   String?
+  chatSessionId String?
+  action        String
+  outcome       String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
 
-  actor     User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
-  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actor       User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  workspace   Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  chatSession ChatSession? @relation(fields: [chatSessionId], references: [id], onDelete: SetNull)
 
   @@index([actorUserId])
   @@index([workspaceId])
   @@index([createdAt])
+  @@index([chatSessionId])
   @@map("audit_logs")
+}
+
+model AgentPersona {
+  id                 String         @id @default(cuid())
+  mode               ChatMode
+  subMode            FinOpsSubMode?
+  modeKey            String         @unique
+  systemPrompt       String
+  allowedBinaries    String[]       @default([])
+  docLookupAllowed   Boolean        @default(true)
+  mutatingCommandCap Int?
+  updatedByUserId    String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@map("agent_personas")
 }
