@@ -20,6 +20,8 @@
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.126.0",
+    "openai": "^7.15.0",
     "express": "^5.2.1",
     "@prisma/client": "^7.10.0",
     "@prisma/adapter-pg": "^7.10.0",
