@@ -12,6 +12,12 @@ const ERROR_CODES = Object.freeze({
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   NOT_FOUND: 'NOT_FOUND',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
+  // Thrown with HTTP 503 by the AI orchestrator when ChatSettings has no
+  // provider / API key configured yet.
+  AI_PROVIDER_NOT_CONFIGURED: 'AI_PROVIDER_NOT_CONFIGURED',
+  // Thrown with HTTP 409 when a confirm/cancel loses the race for a command
+  // that is no longer PENDING_CONFIRMATION (already confirmed, cancelled, ...).
+  COMMAND_ALREADY_RESOLVED: 'COMMAND_ALREADY_RESOLVED',
 });
 
 const ERROR_MESSAGES = Object.freeze({
@@ -26,6 +32,9 @@ const ERROR_MESSAGES = Object.freeze({
   [ERROR_CODES.VALIDATION_ERROR]: 'The request could not be validated.',
   [ERROR_CODES.NOT_FOUND]: 'The requested resource was not found.',
   [ERROR_CODES.INTERNAL_ERROR]: 'An unexpected error occurred.',
+  [ERROR_CODES.AI_PROVIDER_NOT_CONFIGURED]:
+    'No AI provider is configured yet. An administrator needs to set one up in Manage Chat Settings.',
+  [ERROR_CODES.COMMAND_ALREADY_RESOLVED]: 'This command has already been confirmed or cancelled.',
 });
 
 module.exports = { ERROR_CODES, ERROR_MESSAGES };
