@@ -4,3 +4,6 @@ dist/
 build/
 *.log
 .DS_Store
+
+# Local git worktrees for isolated feature work
+.worktrees/
