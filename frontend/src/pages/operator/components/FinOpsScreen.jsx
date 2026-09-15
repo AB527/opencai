@@ -43,7 +43,7 @@ const SUB_MODES = [
   },
 ];
 
-export function FinOpsScreen({ subMode, onSelectSubMode, messages, onSend }) {
+export function FinOpsScreen({ subMode, onSelectSubMode, messages, onSend, onConfirm, onCancel, sending }) {
   const active = SUB_MODES.find((m) => m.key === subMode);
 
   return (
@@ -84,7 +84,16 @@ export function FinOpsScreen({ subMode, onSelectSubMode, messages, onSend }) {
           </div>
         </div>
 
-        {active && <ChatPanel messages={messages} onSend={onSend} suggestedPrompts={active.prompts} />}
+        {active && (
+          <ChatPanel
+            messages={messages}
+            onSend={onSend}
+            suggestedPrompts={active.prompts}
+            onConfirm={onConfirm}
+            onCancel={onCancel}
+            sending={sending}
+          />
+        )}
       </div>
     </div>
   );

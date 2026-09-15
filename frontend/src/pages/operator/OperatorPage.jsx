@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../lib/AuthContext';
 import { useWorkspace } from '../../lib/WorkspaceContext';
-import { createChatSession, listChatSessions } from '../../lib/chatApi';
+import {
+  createChatSession,
+  listChatSessions,
+  sendChatMessage,
+  confirmChatMessage,
+  cancelChatMessage,
+} from '../../lib/chatApi';
 import { TopNav } from '../../components/TopNav';
 import { OperatorSidebar } from './components/OperatorSidebar';
 import { WorkspaceSelectorForm } from './components/WorkspaceSelectorForm';
@@ -9,10 +15,15 @@ import { ChatSessionHeader } from './components/ChatSessionHeader';
 import { AiOpsScreen } from './components/AiOpsScreen';
 import { FinOpsScreen } from './components/FinOpsScreen';
 
-// Sessions are real (Phase 5 persists them), but the AI round-trip is not
-// wired up until Phase 6 -- sending a message just appends locally and shows
-// a placeholder reply rather than calling a real backend agent.
-const PLACEHOLDER_REPLY = "Agent execution isn't connected yet -- this arrives in Phase 6.";
+function mergeMessages(existing, incoming) {
+  const merged = [...existing];
+  for (const m of incoming) {
+    const idx = merged.findIndex((x) => x.id === m.id);
+    if (idx === -1) merged.push(m);
+    else merged[idx] = m;
+  }
+  return merged;
+}
 
 export function OperatorPage() {
   const { token } = useAuth();
@@ -24,6 +35,7 @@ export function OperatorPage() {
   const [sessionsByKey, setSessionsByKey] = useState({});
   const [messagesBySession, setMessagesBySession] = useState({});
   const [recentSessions, setRecentSessions] = useState([]);
+  const [sending, setSending] = useState(false);
 
   function refreshRecentSessions() {
     listChatSessions(token, { pageSize: 5 })
@@ -65,19 +77,46 @@ export function OperatorPage() {
     refreshRecentSessions();
   }
 
-  function handleSend(text) {
-    if (!currentSession) return;
-    setMessagesBySession((prev) => {
-      const existing = prev[currentSession.id] || [];
-      return {
+  async function handleSend(text) {
+    if (!currentSession || sending) return;
+    setSending(true);
+    try {
+      const res = await sendChatMessage(token, currentSession.id, text);
+      setMessagesBySession((prev) => ({
         ...prev,
-        [currentSession.id]: [
-          ...existing,
-          { role: 'USER', content: text },
-          { role: 'ASSISTANT', content: PLACEHOLDER_REPLY },
-        ],
-      };
-    });
+        [currentSession.id]: mergeMessages(prev[currentSession.id] || [], res.messages),
+      }));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleConfirm(messageId) {
+    if (!currentSession) return;
+    setSending(true);
+    try {
+      const res = await confirmChatMessage(token, currentSession.id, messageId);
+      setMessagesBySession((prev) => ({
+        ...prev,
+        [currentSession.id]: mergeMessages(prev[currentSession.id] || [], res.messages),
+      }));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleCancel(messageId) {
+    if (!currentSession) return;
+    setSending(true);
+    try {
+      const res = await cancelChatMessage(token, currentSession.id, messageId);
+      setMessagesBySession((prev) => ({
+        ...prev,
+        [currentSession.id]: mergeMessages(prev[currentSession.id] || [], res.messages),
+      }));
+    } finally {
+      setSending(false);
+    }
   }
 
   function handleSelectMode(mode) {
@@ -127,6 +166,9 @@ export function OperatorPage() {
                   onEditWorkspace={() => setEditingWorkspace(true)}
                   messages={messages}
                   onSend={handleSend}
+                  onConfirm={handleConfirm}
+                  onCancel={handleCancel}
+                  sending={sending}
                 />
               ) : (
                 <FinOpsScreen
@@ -134,6 +176,9 @@ export function OperatorPage() {
                   onSelectSubMode={setFinanceSubMode}
                   messages={messages}
                   onSend={handleSend}
+                  onConfirm={handleConfirm}
+                  onCancel={handleCancel}
+                  sending={sending}
                 />
               )}
             </>

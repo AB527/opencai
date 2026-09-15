@@ -8,7 +8,7 @@ const AIOPS_PROMPTS = [
   'Create a new S3 bucket',
 ];
 
-export function AiOpsScreen({ workspace, onEditWorkspace, messages, onSend }) {
+export function AiOpsScreen({ workspace, onEditWorkspace, messages, onSend, onConfirm, onCancel, sending }) {
   return (
     <div>
       <div className="text-center">
@@ -23,7 +23,14 @@ export function AiOpsScreen({ workspace, onEditWorkspace, messages, onSend }) {
 
       <div className="mx-auto mt-6 max-w-3xl space-y-6">
         <WorkspaceSummaryCard workspace={workspace} onEdit={onEditWorkspace} />
-        <ChatPanel messages={messages} onSend={onSend} suggestedPrompts={AIOPS_PROMPTS} />
+        <ChatPanel
+          messages={messages}
+          onSend={onSend}
+          suggestedPrompts={AIOPS_PROMPTS}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+          sending={sending}
+        />
       </div>
     </div>
   );
