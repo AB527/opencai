@@ -22,20 +22,62 @@ const TIMEOUT_EXIT_CODE = 124;
 
 const IDLE_SWEEP_INTERVAL_MS = 60000;
 
+// Per-stream cap on how much command output is buffered in this process.
+const MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB
+const TRUNCATION_MARKER = '\n[... output truncated ...]';
+
+// Grace period added to the in-container `timeout` before this process stops
+// waiting on the exec stream, for the case where the hijacked socket itself
+// wedges and neither 'end' nor 'close' ever arrives.
+const STREAM_WAIT_GRACE_MS = 10000;
+
+// How long to keep polling exec.inspect() for a populated ExitCode after the
+// output stream closes.
+const EXIT_CODE_POLL_ATTEMPTS = 20;
+const EXIT_CODE_POLL_INTERVAL_MS = 50;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
- * Collect everything written to it into an array of Buffers. Used instead of
- * PassThrough so demuxStream's synchronous `.write()` calls land in our buffer
- * before the source stream's 'end' fires -- no lost-tail race.
+ * Collect everything written to it into an array of Buffers, capped. Used
+ * instead of PassThrough so demuxStream's synchronous `.write()` calls land in
+ * our buffer before the source stream's 'end' fires -- no lost-tail race.
+ *
+ * The cap matters: the container's memory limit constrains the *container*, not
+ * this Node process. Without it a single command with a huge response (say
+ * `aws s3api list-objects` over a large bucket) could exhaust the backend host's
+ * heap. Bytes past the cap are counted and dropped, never buffered.
  */
 function createCollector() {
   const chunks = [];
+  let total = 0;
+  let truncated = false;
+
   const writable = new Writable({
     write(chunk, _encoding, callback) {
-      chunks.push(Buffer.from(chunk));
+      const remaining = MAX_OUTPUT_BYTES - total;
+      if (remaining > 0) {
+        const buf = Buffer.from(chunk);
+        const slice = buf.length <= remaining ? buf : buf.subarray(0, remaining);
+        chunks.push(slice);
+        total += slice.length;
+        if (slice.length < buf.length) truncated = true;
+      } else {
+        truncated = true;
+      }
       callback();
     },
   });
-  return { writable, chunks };
+
+  return {
+    writable,
+    toString() {
+      const text = Buffer.concat(chunks).toString('utf8');
+      return truncated ? `${text}${TRUNCATION_MARKER}` : text;
+    },
+  };
 }
 
 function expiryFrom(idleTimeoutMinutes) {
@@ -70,12 +112,18 @@ async function provisionSandbox(session, { idleTimeoutMinutes }) {
     }
   }
 
+  let started = null;
   try {
     const container = await docker.createContainer({
       Image: SANDBOX_IMAGE_TAG,
       Cmd: ['sleep', 'infinity'],
       Entrypoint: [],
       Tty: false,
+      // Defense in depth: the image's own `USER sandbox` already pins this, but
+      // asserting it at the Docker API level means the container is non-root
+      // even if some other image ever resolves for this tag. Numeric form needs
+      // no matching /etc/passwd entry.
+      User: '10001:10001',
       HostConfig: {
         Memory: SANDBOX_DEFAULT_MEMORY_BYTES,
         NanoCpus: SANDBOX_DEFAULT_NANO_CPUS,
@@ -97,6 +145,7 @@ async function provisionSandbox(session, { idleTimeoutMinutes }) {
       },
     });
     await container.start();
+    started = container;
 
     await prisma.chatSession.update({
       where: { id: session.id },
@@ -110,6 +159,19 @@ async function provisionSandbox(session, { idleTimeoutMinutes }) {
 
     return { containerId: container.id };
   } catch (err) {
+    // If the container started but its id never got persisted, nothing can ever
+    // find it again -- the idle sweep only looks at rows marked 'ready'. Reap it
+    // here or it leaks for the lifetime of the host.
+    if (started) {
+      try {
+        await started.remove({ force: true });
+      } catch (removeErr) {
+        console.error(
+          `[sandbox] failed to remove orphaned container ${started.id}: ${removeErr.message}`,
+        );
+      }
+    }
+
     // Best-effort status write -- must never mask the original failure.
     try {
       await prisma.chatSession.update({
@@ -161,30 +223,54 @@ async function executeInSandbox(containerId, argv, { env, timeoutSeconds }) {
   const stdout = createCollector();
   const stderr = createCollector();
 
-  await new Promise((resolve, reject) => {
+  // The in-container `timeout` handles the normal case, but a wedged hijacked
+  // socket could otherwise leave this pending forever. Race the stream against
+  // the command's own budget plus a grace period. `streamWedged` is treated
+  // exactly like a timed-out command: failure-shaped, never success-shaped.
+  const streamWedged = await new Promise((resolve, reject) => {
+    const guard = setTimeout(() => resolve(true), timeoutSeconds * 1000 + STREAM_WAIT_GRACE_MS);
+    const settle = () => {
+      clearTimeout(guard);
+      resolve(false);
+    };
+    const fail = (err) => {
+      clearTimeout(guard);
+      reject(err);
+    };
+
     docker.modem.demuxStream(stream, stdout.writable, stderr.writable);
-    stream.on('end', resolve);
-    stream.on('close', resolve);
-    stream.on('error', reject);
+    stream.on('end', settle);
+    stream.on('close', settle);
+    stream.on('error', fail);
   });
 
   // The exec can still read as Running for a moment after the output stream
-  // closes; poll briefly so ExitCode is populated rather than null.
+  // closes; poll briefly so ExitCode is populated rather than null. The final
+  // attempt does not sleep before giving up.
   let exitCode = null;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const info = await exec.inspect();
-    if (!info.Running && info.ExitCode !== null && info.ExitCode !== undefined) {
-      exitCode = info.ExitCode;
-      break;
+  if (!streamWedged) {
+    for (let attempt = 0; attempt < EXIT_CODE_POLL_ATTEMPTS; attempt += 1) {
+      const info = await exec.inspect();
+      if (!info.Running && info.ExitCode !== null && info.ExitCode !== undefined) {
+        exitCode = info.ExitCode;
+        break;
+      }
+      if (attempt < EXIT_CODE_POLL_ATTEMPTS - 1) {
+        await sleep(EXIT_CODE_POLL_INTERVAL_MS);
+      }
     }
-    await new Promise((r) => setTimeout(r, 50));
   }
 
+  // Fail closed. An exec still running after the stream closed, or a wedged
+  // stream, yields no exit code -- report it as timed out rather than letting a
+  // caller's `if (!exitCode)` read "unknown" as "success".
+  const unresolved = exitCode === null;
+
   return {
-    stdout: Buffer.concat(stdout.chunks).toString('utf8'),
-    stderr: Buffer.concat(stderr.chunks).toString('utf8'),
+    stdout: stdout.toString(),
+    stderr: stderr.toString(),
     exitCode,
-    timedOut: exitCode === TIMEOUT_EXIT_CODE,
+    timedOut: exitCode === TIMEOUT_EXIT_CODE || unresolved,
   };
 }
 
