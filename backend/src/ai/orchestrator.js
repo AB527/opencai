@@ -523,46 +523,102 @@ async function confirmCommand({ session, workspace, credential, messageId, userI
     return { messages: createdMessages };
   }
 
-  // Resolved before the counter is consumed, so a misconfigured provider cannot
-  // burn a slot off the session's mutating budget.
-  const providerConfig = await resolveProviderConfig();
+  // Everything from here to the end of execution runs under one catch. Past the
+  // atomic claim the command is already CONFIRMED and (shortly) the session's
+  // mutating budget is already spent, but COMMAND_EXECUTED is only written once
+  // execution completes -- so an unhandled throw in here would leave the single
+  // most audit-sensitive operation in the product with no audit record at all,
+  // and the message stranded in the non-terminal CONFIRMED state that the claim
+  // guard's PENDING_CONFIRMATION predicate makes unretryable. Fail loudly into
+  // the transcript and the audit log instead, exactly as handleUserMessage does
+  // for its own provisioning failure.
+  let providerConfig;
+  let containerId;
+  let env;
+  let execution;
 
-  // Atomic cap increment. The `lt` predicate and the increment are one
-  // statement, so concurrent confirms can never push the count past the cap:
-  // the losing UPDATE matches zero rows.
-  const capResult = await prisma.chatSession.updateMany({
-    where: { id: session.id, mutatingCommandCount: { lt: session.mutatingCommandCap } },
-    data: { mutatingCommandCount: { increment: 1 } },
-  });
-  if (capResult.count !== 1) {
-    const capped = await prisma.chatMessage.update({
-      where: { id: messageId },
-      data: { status: CHAT_MESSAGE_STATUS.CAPPED },
+  try {
+    // Resolved before the counter is consumed, so a misconfigured provider
+    // cannot burn a slot off the session's mutating budget.
+    providerConfig = await resolveProviderConfig();
+
+    // Atomic cap increment. The `lt` predicate and the increment are one
+    // statement, so concurrent confirms can never push the count past the cap:
+    // the losing UPDATE matches zero rows.
+    const capResult = await prisma.chatSession.updateMany({
+      where: { id: session.id, mutatingCommandCount: { lt: session.mutatingCommandCap } },
+      data: { mutatingCommandCount: { increment: 1 } },
     });
-    createdMessages.push(capped);
+    if (capResult.count !== 1) {
+      const capped = await prisma.chatMessage.update({
+        where: { id: messageId },
+        data: { status: CHAT_MESSAGE_STATUS.CAPPED },
+      });
+      createdMessages.push(capped);
 
-    await createAssistantText(createdMessages, session.id, cappedText(session.mutatingCommandCap));
+      await createAssistantText(
+        createdMessages,
+        session.id,
+        cappedText(session.mutatingCommandCap),
+      );
+      await writeAudit({
+        session,
+        workspace,
+        action: AUDIT_ACTIONS.SESSION_CAP_EXCEEDED,
+        outcome: AUDIT_OUTCOMES.CAPPED,
+        metadata: { command: result.argv },
+      });
+
+      return { messages: createdMessages };
+    }
+
+    // `updateMany` increments the row in the database and does not touch this
+    // in-memory copy. Without this line, a mutating command the model chains on
+    // in the runModelLoop call below would be cap-checked against a stale count
+    // -- so the Operator could be shown a confirmation card for a command that
+    // the confirm-time atomic guard will then always refuse.
+    session.mutatingCommandCount += 1;
+
+    containerId = (
+      await provisionSandbox(session, {
+        idleTimeoutMinutes: providerConfig.sandboxIdleTimeoutMinutes,
+      })
+    ).containerId;
+    env = credentialToEnv(workspace.csp, credential);
+
+    // argv, as an array. Never a shell string.
+    execution = await executeInSandbox(containerId, result.argv, {
+      env,
+      timeoutSeconds: providerConfig.sandboxCommandTimeoutSeconds,
+    });
+  } catch (err) {
+    console.error(
+      `[orchestrator] confirmed command failed for session ${session.id}: ${err.message}`,
+    );
+
+    const failed = await prisma.chatMessage.update({
+      where: { id: messageId },
+      data: { status: CHAT_MESSAGE_STATUS.FAILED },
+    });
+    createdMessages.push(failed);
+
+    await createAssistantText(
+      createdMessages,
+      session.id,
+      `Something went wrong while running this command: ${err.message || 'unknown error'}`,
+    );
     await writeAudit({
       session,
       workspace,
-      action: AUDIT_ACTIONS.SESSION_CAP_EXCEEDED,
-      outcome: AUDIT_OUTCOMES.CAPPED,
-      metadata: { command: result.argv },
+      action: AUDIT_ACTIONS.COMMAND_EXECUTED,
+      outcome: AUDIT_OUTCOMES.FAILURE,
+      metadata: { command: result.argv, error: err.message },
     });
 
+    // The Operator sees a clean failure in the transcript, not a 500.
     return { messages: createdMessages };
   }
 
-  const { containerId } = await provisionSandbox(session, {
-    idleTimeoutMinutes: providerConfig.sandboxIdleTimeoutMinutes,
-  });
-  const env = credentialToEnv(workspace.csp, credential);
-
-  // argv, as an array. Never a shell string.
-  const execution = await executeInSandbox(containerId, result.argv, {
-    env,
-    timeoutSeconds: providerConfig.sandboxCommandTimeoutSeconds,
-  });
   const output = combineOutput(execution);
   const success = execution.exitCode === 0 && !execution.timedOut;
   const finalStatus = success ? CHAT_MESSAGE_STATUS.EXECUTED : CHAT_MESSAGE_STATUS.FAILED;

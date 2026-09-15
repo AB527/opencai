@@ -41,7 +41,7 @@ function reset() {
   S.sessionUpdateManyArgs = [];
   S.claimCounts = [];
   S.capCounts = [];
-  S.sessionRow = null;
+  S.dbMutatingCount = 0;
 
   S.persona = {
     systemPrompt: 'PERSONA PROMPT',
@@ -135,8 +135,13 @@ const fakePrisma = {
       S.sessionUpdateManyArgs.push(args);
       if (S.capCounts.length > 0) return { count: S.capCounts.shift() };
       const lt = args.where.mutatingCommandCount?.lt;
-      if (S.sessionRow && S.sessionRow.mutatingCommandCount < lt) {
-        S.sessionRow.mutatingCommandCount += 1;
+      // Real Prisma increments the row in the database and never touches the
+      // caller's in-memory `session` object. `S.dbMutatingCount` is that
+      // database-side counter, deliberately kept separate from
+      // `session.mutatingCommandCount` so that any in-memory update has to come
+      // from the orchestrator itself.
+      if (S.dbMutatingCount < lt) {
+        S.dbMutatingCount += 1;
         return { count: 1 };
       }
       return { count: 0 };
@@ -223,7 +228,7 @@ function makeSession(over = {}) {
     sandboxStatus: null,
     ...over,
   };
-  S.sessionRow = session;
+  S.dbMutatingCount = session.mutatingCommandCount;
   return session;
 }
 
@@ -940,7 +945,10 @@ test('confirmCommand executes the command, records the result and continues the 
     mutatingCommandCount: { lt: 10 },
   });
   assert.deepEqual(S.sessionUpdateManyArgs[0].data, { mutatingCommandCount: { increment: 1 } });
-  assert.equal(session.mutatingCommandCount, 1);
+  assert.equal(S.dbMutatingCount, 1, 'the database-side counter moved once');
+  // The stub deliberately does NOT touch the in-memory session object, so this
+  // can only be true if the orchestrator updated its own copy explicitly.
+  assert.equal(session.mutatingCommandCount, 1, 'the in-memory count was kept in step');
 
   // The claim was an updateMany gated on PENDING_CONFIRMATION.
   assert.deepEqual(S.messageUpdateManyArgs[0].where, {
@@ -1107,6 +1115,53 @@ test('confirmCommand: re-classification that is no longer confirmable FAILS with
   assert.equal(S.classifyCalls[0].commandString, 'aws s3 rb s3://b');
 });
 
+test('confirmCommand: a chained proposal in the same call sees the updated mutating count', async () => {
+  reset();
+  // Cap of 1: the confirmed command consumes the whole budget, so the mutating
+  // command the model chains on immediately afterwards must be refused. With a
+  // stale in-memory count this would instead be shown to the Operator as a
+  // confirmable card that the confirm-time guard would then always refuse.
+  const session = makeSession({ mutatingCommandCap: 1, mutatingCommandCount: 0 });
+  const pending = seedPendingCommand('sess-1', 'aws s3 rb s3://b');
+
+  S.classifyResults = [
+    verdict({
+      verdict: POLICY_VERDICTS.REQUIRE_CONFIRMATION,
+      dryRunCapable: false,
+      argv: ['aws', 's3', 'rb', 's3://b'],
+    }),
+    verdict({
+      verdict: POLICY_VERDICTS.REQUIRE_CONFIRMATION,
+      dryRunCapable: false,
+      argv: ['aws', 's3', 'rb', 's3://c'],
+    }),
+  ];
+  S.execResults = [{ stdout: 'remove_bucket: b', stderr: '', exitCode: 0, timedOut: false }];
+  S.providerResponses = [
+    { type: 'command_request', content: 'aws s3 rb s3://c', command: 'aws s3 rb s3://c' },
+  ];
+
+  const { messages } = await confirmCommand({
+    session,
+    workspace: WORKSPACE,
+    credential: CREDENTIAL,
+    messageId: pending.id,
+    userId: 'user-1',
+  });
+
+  assert.equal(session.mutatingCommandCount, 1);
+  assert.deepEqual(kinds(messages), [
+    'ASSISTANT/COMMAND_REQUEST/EXECUTED',
+    'ASSISTANT/COMMAND_RESULT/EXECUTED',
+    'ASSISTANT/COMMAND_REQUEST/CAPPED',
+    'ASSISTANT/TEXT/null',
+  ]);
+  assert.match(messages[3].content, /reached its limit of 1 mutating commands/);
+  // Only the confirmed command ran; the chained proposal never did.
+  assert.equal(S.execCalls.length, 1);
+  assert.equal(S.audits.filter((a) => a.action === AUDIT_ACTIONS.SESSION_CAP_EXCEEDED).length, 1);
+});
+
 test('confirmCommand: an unknown or already-resolved message id is a 409', async () => {
   reset();
   const session = makeSession();
@@ -1127,6 +1182,90 @@ test('confirmCommand: an unknown or already-resolved message id is a 409', async
     },
   );
   assert.equal(S.execCalls.length, 0);
+});
+
+/* -------------------------------------------------------------------------- */
+/* confirmCommand failure recovery                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Run one confirm whose post-claim section blows up, with console.error muted.
+ * `breakIt` decides which collaborator throws.
+ */
+async function confirmWithFailure(breakIt) {
+  reset();
+  const session = makeSession();
+  const pending = seedPendingCommand('sess-1', 'aws s3 rb s3://b');
+  S.classifyResults = [
+    verdict({
+      verdict: POLICY_VERDICTS.REQUIRE_CONFIRMATION,
+      dryRunCapable: false,
+      argv: ['aws', 's3', 'rb', 's3://b'],
+    }),
+  ];
+  breakIt();
+
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const out = await confirmCommand({
+      session,
+      workspace: WORKSPACE,
+      credential: CREDENTIAL,
+      messageId: pending.id,
+      userId: 'user-1',
+    });
+    return { ...out, session, pending };
+  } finally {
+    console.error = originalError;
+  }
+}
+
+function assertCleanFailure(messages, expectedErrorText) {
+  assert.deepEqual(kinds(messages), ['ASSISTANT/COMMAND_REQUEST/FAILED', 'ASSISTANT/TEXT/null']);
+  assert.match(messages[1].content, /^Something went wrong while running this command: /);
+  if (expectedErrorText) assert.match(messages[1].content, expectedErrorText);
+
+  // The whole point: a confirmed command that failed still leaves an audit
+  // record, even though no COMMAND_RESULT row with real output exists.
+  assert.equal(S.audits.length, 1);
+  assert.equal(S.audits[0].action, AUDIT_ACTIONS.COMMAND_EXECUTED);
+  assert.equal(S.audits[0].outcome, AUDIT_OUTCOMES.FAILURE);
+  assert.deepEqual(S.audits[0].metadata.command, ['aws', 's3', 'rb', 's3://b']);
+  assert.ok(S.audits[0].metadata.error);
+}
+
+test('confirmCommand: a sandbox provisioning failure fails the message cleanly and audits it', async () => {
+  const { messages } = await confirmWithFailure(() => {
+    S.provisionError = new Error('no such image');
+  });
+
+  assertCleanFailure(messages, /no such image/);
+  assert.equal(S.execCalls.length, 0);
+  assert.equal(S.providerCalls.length, 0);
+});
+
+test('confirmCommand: an execution failure fails the message cleanly and audits it', async () => {
+  const { messages } = await confirmWithFailure(() => {
+    S.execResults = [new Error('docker exploded')];
+  });
+
+  assertCleanFailure(messages, /docker exploded/);
+  assert.equal(S.execCalls.length, 1);
+  assert.equal(S.providerCalls.length, 0);
+});
+
+test('confirmCommand: an unconfigured provider fails the message instead of throwing a 503', async () => {
+  const { messages, session } = await confirmWithFailure(() => {
+    S.settings = null;
+  });
+
+  assertCleanFailure(messages);
+  assert.equal(S.execCalls.length, 0);
+  // resolveProviderConfig throws before the counter is consumed.
+  assert.equal(S.sessionUpdateManyArgs.length, 0);
+  assert.equal(session.mutatingCommandCount, 0);
+  assert.equal(S.dbMutatingCount, 0);
 });
 
 /* -------------------------------------------------------------------------- */
