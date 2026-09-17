@@ -215,6 +215,13 @@ Because the model can run arbitrary shell commands rather than picking from a fi
 12. **Full, tamper-evident audit trail.** Every command — proposed, confirmed or cancelled, executed, and its outcome — is logged to `AuditLog` with actor, Workspace, and timestamp, independent of the chat transcript, so it survives even if chat history were ever altered or deleted.
 13. **Pinned tool versions.** The sandbox image ships specific, version-pinned CLI tool builds that are deliberately updated and reviewed, rather than auto-updating on every run — so a compromised upstream package can't silently change what the sandbox is capable of.
 
+### Known gaps (Phase 6, landed on `dev`)
+
+Phase 6 is implemented and merged (`backend/src/ai/**`), with two guardrails only partially satisfied — tracked here deliberately rather than left to be rediscovered:
+
+- **Guardrail 8 (network egress restriction) — not implemented.** `backend/src/ai/sandbox/sandboxManager.js` runs containers on Docker's default `bridge` network, so a sandbox has full outbound internet access rather than being restricted to the CSP's API endpoints only. Needs a network firewall/egress-proxy layer (e.g. an allowlist of the CSP's published IP ranges, or a forward proxy the container is forced through) before this guardrail is actually met.
+- **Guardrail 7 (spend ceiling) — partially implemented.** The session-level *resource* cap (`ChatSession.mutatingCommandCap`/`mutatingCommandCount`) is enforced atomically. The admin-configurable `ChatSettings.spendCeilingUsd` field is stored but never checked (`backend/src/modules/admin/chatSettings.schemas.js`) — no real-time cost estimation exists yet.
+
 ## Docker packaging (docker-compose.yml — prod-like / distribution run only)
 
 Four services:
