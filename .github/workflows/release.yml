@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    branches: [release]
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic.outputs.new_release_version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - name: Release
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    needs: release
+    if: needs.release.outputs.new_release_published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: release
+
+      - name: Lowercase repository owner
+        id: owner
+        run: echo "name=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      # frontend/Dockerfile's build stage needs frontend/.env present to bake
+      # VITE_API_BASE_URL into the static bundle (Phase 7's design) -- it's
+      # gitignored and doesn't exist in a fresh checkout. backend/Dockerfile
+      # needs no equivalent step: its secrets are injected at container
+      # runtime via env_file/environment, never baked in at build time.
+      - name: Prepare frontend build env
+        if: matrix.image == 'frontend'
+        run: cp frontend/.env.example frontend/.env
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: ./${{ matrix.image }}
+          push: true
+          tags: |
+            ghcr.io/${{ steps.owner.outputs.name }}/opencai-${{ matrix.image }}:${{ needs.release.outputs.new_release_version }}
+            ghcr.io/${{ steps.owner.outputs.name }}/opencai-${{ matrix.image }}:latest
