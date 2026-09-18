@@ -16,6 +16,7 @@ jobs:
     outputs:
       new_release_published: ${{ steps.semantic.outputs.new_release_published }}
       new_release_version: ${{ steps.semantic.outputs.new_release_version }}
+      new_release_git_tag: ${{ steps.semantic.outputs.new_release_git_tag }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,6 +31,8 @@ jobs:
       - name: Release
         id: semantic
         uses: cycjimmy/semantic-release-action@v6
+        with:
+          semantic_version: 25.0.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -46,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: release
+          ref: ${{ needs.release.outputs.new_release_git_tag }}
 
       - name: Lowercase repository owner
         id: owner
