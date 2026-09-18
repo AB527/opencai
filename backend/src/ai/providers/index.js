@@ -1,9 +1,13 @@
 const anthropicProvider = require('./anthropicProvider');
 const openaiProvider = require('./openaiProvider');
+const geminiProvider = require('./geminiProvider');
+const groqProvider = require('./groqProvider');
 
 const PROVIDERS = {
   ANTHROPIC: anthropicProvider,
   OPENAI: openaiProvider,
+  GEMINI: geminiProvider,
+  GROQ: groqProvider,
 };
 
 function getProvider(providerName) {

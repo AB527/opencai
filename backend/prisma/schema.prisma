@@ -48,6 +48,8 @@ enum ChatMessageKind {
 enum AiProvider {
   ANTHROPIC
   OPENAI
+  GEMINI
+  GROQ
 }
 
 model User {

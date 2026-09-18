@@ -5,7 +5,7 @@ import { AdminLayout } from './AdminLayout';
 
 export function ManageChatSettings() {
   const { token } = useAuth();
-  const [provider, setProvider] = useState('anthropic');
+  const [provider, setProvider] = useState('ANTHROPIC');
   const [model, setModel] = useState('');
   const [configText, setConfigText] = useState('');
   const [error, setError] = useState('');
@@ -64,8 +64,10 @@ export function ManageChatSettings() {
             onChange={(e) => setProvider(e.target.value)}
             className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           >
-            <option value="anthropic">Anthropic</option>
-            <option value="openai">OpenAI</option>
+            <option value="ANTHROPIC">Anthropic</option>
+            <option value="OPENAI">OpenAI</option>
+            <option value="GEMINI">Gemini</option>
+            <option value="GROQ">Groq</option>
           </select>
         </div>
         <div>
