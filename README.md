@@ -71,3 +71,22 @@ trusted local/single-tenant run only and must never be exposed to an untrusted n
 Note: `opencai` / `opencai12345` (the postgres/minio credentials hardcoded in `docker-compose.yml`)
 are local development defaults — change them in both `docker-compose.yml` and `backend/.env` before
 this stack is ever reachable from anything beyond localhost.
+
+## Releases
+
+- **`dev`** — all regular commits and feature work land here.
+- **`release`** — protected; only reachable via a pull request from `dev`. Merging a PR into `release` triggers `.github/workflows/release.yml`, which:
+  1. Runs [semantic-release](https://semantic-release.gitbook.io/) against the Conventional Commit messages (`feat:`, `fix:`, `feat!:`/`BREAKING CHANGE:`, etc.) merged since the last release, computing the next semantic version.
+  2. Bumps `frontend/package.json` and `backend/package.json` to that version, updates `CHANGELOG.md`, commits both back to `release`, tags the commit (`vX.Y.Z`), and publishes a GitHub Release with generated notes.
+  3. If (and only if) a new version was actually released, builds `backend/Dockerfile` and `frontend/Dockerfile` and pushes both to GitHub Container Registry, tagged with that version and `latest`.
+
+Pull a released image instead of building locally:
+
+```sh
+docker pull ghcr.io/<owner>/opencai-backend:latest
+docker pull ghcr.io/<owner>/opencai-frontend:latest
+```
+
+(replace `<owner>` with this repo's GitHub owner, lowercased) — then point `docker-compose.yml`'s `backend`/`frontend` services at these images instead of `build: ./backend`/`build: ./frontend` to run a fully pre-built stack.
+
+Commit messages on `dev` (and therefore in any PR merged to `release`) must follow [Conventional Commits](https://www.conventionalcommits.org/) for semantic-release to compute the right version bump — a plain `fix: ...`/`feat: ...` prefix is enough for most changes; `feat!:` or a `BREAKING CHANGE:` footer signals a major version bump.
