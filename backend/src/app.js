@@ -15,7 +15,16 @@ const { ROLES } = require('./constants/roles');
 const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: config.nodeEnv === 'production' ? false : true }));
+app.use(
+  cors({
+    origin:
+      config.corsOrigin !== undefined
+        ? config.corsOrigin
+        : config.nodeEnv === 'production'
+          ? false
+          : true,
+  }),
+);
 app.use(express.json());
 
 // Infra-probe endpoints (/healthz, /readyz) are mounted unprefixed at root.

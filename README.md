@@ -65,4 +65,9 @@ the Postgres/MinIO data.
 Note: the `backend` container mounts the host's Docker socket so the AI agent orchestrator can
 provision sandbox containers as siblings on the host — this gives the backend container
 host-level Docker control, a deliberate trade-off for how the sandboxed command execution in
-Phase 6 works (see PLAN.md's Guardrails section).
+Phase 6 works (see PLAN.md's Guardrails section). Given that access, this stack is intended for a
+trusted local/single-tenant run only and must never be exposed to an untrusted network.
+
+Note: `opencai` / `opencai12345` (the postgres/minio credentials hardcoded in `docker-compose.yml`)
+are local development defaults — change them in both `docker-compose.yml` and `backend/.env` before
+this stack is ever reachable from anything beyond localhost.

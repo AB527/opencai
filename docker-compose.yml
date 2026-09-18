@@ -12,6 +12,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
     networks: [opencai]
 
   minio:
@@ -22,11 +23,21 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    # Recent minio/minio images don't ship curl, so a curl-based healthcheck
+    # can never pass; `mc` is bundled in the image and is MinIO's own
+    # documented healthcheck form.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+    # Publishes the S3 API (9000) and console (9001) ports to the host, per
+    # PLAN.md's description of this service. Previously kept internal-only by
+    # mistake, which also left S3_PUBLIC_URL-issued browser URLs unreachable.
+    ports:
+      - "9000:9000"
+      - "9001:9001"
     networks: [opencai]
 
   # One-shot: creates the S3_BUCKET bucket on first run, then exits. Compose's
@@ -41,7 +52,8 @@ services:
     entrypoint: >
       sh -c "
       mc alias set local http://minio:9000 opencai opencai12345 &&
-      mc mb --ignore-existing local/opencai
+      mc mb --ignore-existing local/opencai &&
+      mc anonymous set download local/opencai
       "
     networks: [opencai]
 
@@ -58,12 +70,28 @@ services:
       S3_ACCESS_KEY: opencai
       S3_SECRET_KEY: opencai12345
       S3_BUCKET: opencai
+      # Browser-facing URL for uploaded branding assets -- minio:9000 is only
+      # resolvable on the compose network, not from a browser on the host.
+      S3_PUBLIC_URL: http://localhost:9000
+      # Frontend (nginx, :8080) and backend (:4000) are different origins
+      # under compose; without this, NODE_ENV=production below makes CORS
+      # reject every browser request from the frontend.
+      CORS_ORIGIN: http://localhost:8080
       NODE_ENV: production
+      # Pins the in-container listen port to match the "4000:4000" mapping
+      # below regardless of backend/.env's own PORT (which still governs
+      # dev.sh).
+      PORT: "4000"
     depends_on:
       postgres:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    restart: unless-stopped
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
     volumes:
       # "Docker outside of Docker": the AI agent orchestrator (backend/src/ai/
       # sandbox/sandboxManager.js) provisions per-chat-session sandbox
@@ -83,6 +111,7 @@ services:
     ports:
       - "8080:80"
     depends_on: [backend]
+    restart: unless-stopped
     networks: [opencai]
 
 networks:

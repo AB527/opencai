@@ -6,7 +6,7 @@ const config = require('../config/env');
 // branding assets (logo, login image) are meant to be visible on the
 // unauthenticated login page. Configured by whoever provisions MinIO/S3.
 function getFileUrl(key) {
-  return `${config.s3Endpoint}/${config.s3Bucket}/${key}`;
+  return `${config.s3PublicUrl}/${config.s3Bucket}/${key}`;
 }
 
 async function uploadFile(key, buffer, contentType) {

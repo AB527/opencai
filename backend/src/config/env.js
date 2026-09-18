@@ -29,6 +29,20 @@ function loadConfig() {
   const s3SecretKey = readRequired(errors, 'S3_SECRET_KEY');
   const s3Bucket = readRequired(errors, 'S3_BUCKET');
 
+  // Optional: the browser-facing URL for S3/MinIO, when it differs from the
+  // internal endpoint the backend itself uses (e.g. `S3_ENDPOINT` is a
+  // compose-network-only hostname like `http://minio:9000` that a browser on
+  // the host can't resolve). Defaults to `s3Endpoint` when unset, so local
+  // dev / `dev.sh` (where `S3_ENDPOINT` is already browser-reachable) is
+  // unaffected.
+  const s3PublicUrl = process.env.S3_PUBLIC_URL || s3Endpoint;
+
+  // Optional: an explicit CORS origin for when the frontend is served from a
+  // different origin than the backend (e.g. the containerized run, where
+  // nginx serves the frontend on :8080 and the backend listens on :4000).
+  // When unset, falls back to the existing NODE_ENV-based behavior.
+  const corsOrigin = process.env.CORS_ORIGIN || undefined;
+
   const rawPort = process.env.PORT || '4000';
   const port = Number(rawPort);
   if (!Number.isInteger(port) || port <= 0) {
@@ -57,6 +71,8 @@ function loadConfig() {
     s3AccessKey,
     s3SecretKey,
     s3Bucket,
+    s3PublicUrl,
+    corsOrigin,
   });
 }
 
