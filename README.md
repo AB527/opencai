@@ -11,13 +11,11 @@ selected Workspace. See [`PLAN.md`](./PLAN.md) for the full build spec and phase
 opencai/
 ├── frontend/          # Vite + React app, own .env
 ├── backend/           # Node.js + Express app, own .env
+├── docker-compose.yml # frontend + backend + postgres + minio, for packaged/prod-like runs
 ├── dev.sh             # starts backend + frontend on host, nothing else
 ├── PLAN.md
 └── README.md
 ```
-
-`docker-compose.yml` (a fully containerized run with Postgres + MinIO) arrives in a later build
-phase (Phase 7 in `PLAN.md`) — it isn't present yet.
 
 ## Prerequisites
 
@@ -42,6 +40,29 @@ or any other infrastructure.
 
 ## Containerized run
 
-Not available yet — `docker-compose.yml` and the backend/frontend Dockerfiles are added in a later
-phase. Once present, `docker compose up` will bring up the full stack (frontend, backend, postgres,
-minio) for a packaged/prod-like run.
+A fully self-contained run — `docker compose` manages its own Postgres and MinIO, unlike `dev.sh`,
+which expects both already running elsewhere.
+
+Prerequisites:
+- `backend/.env` and `frontend/.env`, each copied from their `.env.example` (as in local dev).
+  `backend/.env`'s `DATABASE_URL`/`S3_*` values are overridden by `docker-compose.yml` to point at
+  the compose network's own postgres/minio containers — only `JWT_SECRET`, `MASTER_ENCRYPTION_KEY`,
+  and `TOTP_ISSUER_NAME` need real values here.
+- The AI agent sandbox image, built once on the host (not by this compose file):
+  `docker build -t opencai-sandbox:2.15.30 backend/sandbox` (see `backend/sandbox/README.md`).
+
+```sh
+docker compose up --build -d
+docker compose exec backend npm run prisma:seed   # first run only: seeds the master admin + personas
+```
+
+- Frontend: http://localhost:8080
+- Backend API: http://localhost:4000
+
+`docker compose down` stops the stack and keeps its data (named volumes); add `-v` to also delete
+the Postgres/MinIO data.
+
+Note: the `backend` container mounts the host's Docker socket so the AI agent orchestrator can
+provision sandbox containers as siblings on the host — this gives the backend container
+host-level Docker control, a deliberate trade-off for how the sandboxed command execution in
+Phase 6 works (see PLAN.md's Guardrails section).
