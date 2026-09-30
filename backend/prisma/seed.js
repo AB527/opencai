@@ -1,5 +1,4 @@
 require('dotenv').config();
-const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
@@ -16,7 +15,7 @@ async function seedMasterAdmin(prisma) {
     return;
   }
 
-  const password = process.env.SEED_ADMIN_PASSWORD || crypto.randomBytes(12).toString('base64url');
+  const password = process.env.SEED_ADMIN_PASSWORD || 'admin';
   const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
   await prisma.user.create({
@@ -29,7 +28,7 @@ async function seedMasterAdmin(prisma) {
 
   console.log(`Created master admin "${MASTER_ADMIN_USERNAME}".`);
   if (!process.env.SEED_ADMIN_PASSWORD) {
-    console.log(`Generated password (save this now, it will not be shown again): ${password}`);
+    console.log(`Password: "admin" (default — set SEED_ADMIN_PASSWORD before first seed to choose your own; change this before exposing the instance beyond localhost).`);
   }
 }
 
