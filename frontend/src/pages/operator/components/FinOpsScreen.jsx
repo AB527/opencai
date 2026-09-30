@@ -45,22 +45,30 @@ const SUB_MODES = [
 
 export function FinOpsScreen({ subMode, onSelectSubMode, messages, onSend, onConfirm, onCancel, sending }) {
   const active = SUB_MODES.find((m) => m.key === subMode);
+  // Once a conversation starts, the intro and agent picker give way to it.
+  const started = messages.length > 0;
 
   return (
-    <div>
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">
-          {active ? `FinOps - ${active.title}` : "Hi, I'm FinOps Agent 📊"}
-        </h1>
-        {!active && (
-          <p className="mt-2 text-gray-500 dark:text-gray-400">
-            I can help you to govern, analyze, and optimize Cloud costs.
-          </p>
-        )}
-      </div>
+    <div className={`flex flex-1 flex-col ${active ? '' : 'pb-10'}`}>
+      {!started && (
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-50">
+            {active ? `FinOps - ${active.title}` : "Hi, I'm FinOps Agent 📊"}
+          </h1>
+          {!active && (
+            <p className="mt-2 text-gray-500 dark:text-gray-400">
+              I can help you to govern, analyze, and optimize Cloud costs.
+            </p>
+          )}
+        </div>
+      )}
 
-      <div className="mx-auto mt-6 max-w-4xl space-y-6">
-        <div className="rounded-2xl border border-teal-200 bg-teal-50/40 p-6 dark:border-teal-900 dark:bg-teal-950/20">
+      <div className={`mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 ${started ? '' : 'mt-6'}`}>
+        <div
+          className={`rounded-2xl border border-teal-200 bg-teal-50/40 p-6 dark:border-teal-900 dark:bg-teal-950/20 ${
+            started ? 'hidden' : ''
+          }`}
+        >
           <h2 className="text-lg font-semibold text-teal-800 dark:text-teal-300">
             Select Your FinOps Agent
           </h2>

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
 import { listChatSessions, getChatSession } from '../../lib/chatApi';
 import { TopNav } from '../../components/TopNav';
+import { ChatTranscript } from './components/ChatPanel';
 
 const MODE_LABELS = {
   AIOPS: 'AIOps',
@@ -15,7 +16,9 @@ export function ChatHistoryPage() {
   const [page, setPage] = useState(1);
   const [result, setResult] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
-  const [messages, setMessages] = useState([]);
+  // null while the expanded session's messages are loading.
+  const [messages, setMessages] = useState(null);
+  const expandingRef = useRef(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -27,12 +30,16 @@ export function ChatHistoryPage() {
   async function toggleExpand(sessionId) {
     if (expandedId === sessionId) {
       setExpandedId(null);
+      expandingRef.current = null;
       return;
     }
     setExpandedId(sessionId);
+    setMessages(null);
+    expandingRef.current = sessionId;
     try {
       const session = await getChatSession(token, sessionId);
-      setMessages(session.messages);
+      // Ignore a slower response for a session the user has since collapsed.
+      if (expandingRef.current === sessionId) setMessages(session.messages);
     } catch (err) {
       setError(err.message);
     }
@@ -79,10 +86,11 @@ export function ChatHistoryPage() {
               >
                 <div>
                   <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {MODE_LABELS[session.mode]}
-                    {session.subMode ? ` · ${session.subMode.replace(/_/g, ' ')}` : ''}
+                    {session.title || 'Untitled chat'}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {MODE_LABELS[session.mode]}
+                    {session.subMode ? ` · ${session.subMode.replace(/_/g, ' ')}` : ''} &middot;{' '}
                     {session.workspace.organisation.name} &middot; {session.workspace.account} (
                     {session.workspace.environment}) &middot;{' '}
                     {new Date(session.createdAt).toLocaleString()}
@@ -91,17 +99,21 @@ export function ChatHistoryPage() {
               </button>
               {expandedId === session.id && (
                 <div className="border-t border-gray-100 p-4 dark:border-gray-800">
-                  {messages.length === 0 ? (
+                  {messages === null ? (
+                    <p className="text-sm text-gray-400">Loading…</p>
+                  ) : messages.length === 0 ? (
                     <p className="text-sm text-gray-400">No messages yet.</p>
                   ) : (
-                    <ul className="space-y-2">
-                      {messages.map((m) => (
-                        <li key={m.id} className="text-sm text-gray-700 dark:text-gray-200">
-                          <span className="font-medium">{m.role}:</span> {m.content}
-                        </li>
-                      ))}
-                    </ul>
+                    <ChatTranscript messages={messages} boxed />
                   )}
+                  <div className="mt-3 flex justify-end">
+                    <Link
+                      to={`/operator?session=${session.id}`}
+                      className="rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
+                    >
+                      Open in chat
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>

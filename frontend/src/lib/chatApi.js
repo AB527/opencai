@@ -12,6 +12,9 @@ export const listChatSessions = (token, params = {}) => {
 
 export const getChatSession = (token, id) => apiRequest(`/api/chat/sessions/${id}`, { token });
 
+export const renameChatSession = (token, id, title) =>
+  apiRequest(`/api/chat/sessions/${id}`, { method: 'PATCH', token, body: { title } });
+
 export const sendChatMessage = (token, sessionId, text) =>
   apiRequest(`/api/chat/sessions/${sessionId}/messages`, { method: 'POST', token, body: { text } });
 
