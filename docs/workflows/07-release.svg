@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="820" viewBox="0 0 1180 820">
+<title>Releasing a version</title>
+<defs>
+  <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9" fill="none" stroke="#1f1f1f" stroke-width="1.3"/></marker>
+  <marker id="head-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9" fill="none" stroke="#7a2e2e" stroke-width="1.3"/></marker>
+</defs>
+<rect width="1180" height="820" fill="#fbfaf7"/>
+<text x="48" y="60" font-family="Georgia, 'Times New Roman', serif" font-size="25" fill="#1f1f1f">Releasing a version</text>
+<text x="48" y="86" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="14" fill="#5e5e5e">Work lands on dev; merging into release publishes a version and its images.</text>
+<line x1="48" y1="102" x2="1132" y2="102" stroke="#a3a09a" stroke-width="0.8"/>
+<line x1="48" y1="776" x2="1132" y2="776" stroke="#a3a09a" stroke-width="0.8"/>
+<text x="48" y="798" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12" fill="#5e5e5e">Fig. 7 — source: .github/workflows/ci.yml, .github/workflows/release.yml, .releaserc.json</text>
+<text x="1132" y="798" text-anchor="end" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" letter-spacing="2" fill="#5e5e5e">OPENCAI · WORKFLOWS</text>
+<rect x="90" y="164" width="360" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="270" y="192" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Work on dev</text>
+<text x="270" y="208.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">conventional commits — feat:, fix:, feat!:</text>
+<rect x="90" y="274" width="360" height="84" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="270" y="305" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">CI on every push and pull request</text>
+<text x="270" y="321.25" text-anchor="middle" font-family="Consolas, 'Courier New', monospace" font-size="11.5" font-weight="400" fill="#1f1f1f">backend:  lint · prisma validate · test</text>
+<text x="270" y="337.25" text-anchor="middle" font-family="Consolas, 'Courier New', monospace" font-size="11.5" font-weight="400" fill="#1f1f1f">frontend: lint · build</text>
+<rect x="90" y="406" width="360" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="270" y="434" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Pull request: dev → release</text>
+<text x="270" y="450.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">release is protected by a ruleset</text>
+<path d="M270,226 L270,274" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<path d="M270,358 L270,406" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<rect x="60" y="122" width="420" height="372" rx="4" fill="none" stroke="#a3a09a" stroke-width="1" stroke-dasharray="5 4"/><text x="74" y="142" text-anchor="start" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" letter-spacing="1.6" fill="#5e5e5e">BRANCH  DEV</text>
+<rect x="640" y="164" width="440" height="50" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="860" y="194" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Merge triggers release.yml</text>
+<path d="M450,437 L560,437 L560,189 L640,189" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<text x="505" y="429" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">merge</text>
+<polygon points="860,242 985,284 860,326 735,284" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="860" y="280" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">A new version</text>
+<text x="860" y="296" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">since the last tag?</text>
+<path d="M860,214 L860,242" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<rect x="930" y="384" width="150" height="44" rx="3" fill="#f1eee8" stroke="#1f1f1f" stroke-width="1.5"/>
+<text x="1005" y="411" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Nothing published</text>
+<path d="M985,284 L1005,284 L1005,384" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<text x="1015" y="276" text-anchor="start" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">no</text>
+<rect x="640" y="454" width="260" height="96" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="770" y="483" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">semantic-release</text>
+<text x="770" y="499.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">bumps both package.json files</text>
+<text x="770" y="515.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">writes CHANGELOG.md · commits to release</text>
+<text x="770" y="531.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">tags vX.Y.Z · GitHub Release</text>
+<path d="M860,326 L860,404 L770,404 L770,454" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<text x="780" y="428" text-anchor="start" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">yes</text>
+<rect x="640" y="590" width="440" height="84" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="860" y="621" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Build and push images to GitHub Container Registry</text>
+<text x="860" y="637.25" text-anchor="middle" font-family="Consolas, 'Courier New', monospace" font-size="11.5" font-weight="400" fill="#1f1f1f">ghcr.io/&lt;owner&gt;/opencai-backend:X.Y.Z, :latest</text>
+<text x="860" y="653.25" text-anchor="middle" font-family="Consolas, 'Courier New', monospace" font-size="11.5" font-weight="400" fill="#1f1f1f">ghcr.io/&lt;owner&gt;/opencai-frontend:X.Y.Z, :latest</text>
+<path d="M770,550 L770,570 L860,570 L860,590" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<rect x="610" y="122" width="500" height="580" rx="4" fill="none" stroke="#a3a09a" stroke-width="1" stroke-dasharray="5 4"/><text x="624" y="142" text-anchor="start" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" letter-spacing="1.6" fill="#5e5e5e">BRANCH  RELEASE</text>
+<rect x="90" y="610" width="360" height="44" rx="22" fill="#f1eee8" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="270" y="637" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Pull a released image and run it</text>
+<path d="M640,632 L450,632" fill="none" stroke="#1f1f1f" stroke-width="1.1" stroke-dasharray="4 3" marker-end="url(#head)"/>
+<text x="540" y="624" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">published</text>
+</svg>

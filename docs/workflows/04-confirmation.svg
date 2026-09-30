@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1220" viewBox="0 0 1100 1220">
+<title>Commands that change resources</title>
+<defs>
+  <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9" fill="none" stroke="#1f1f1f" stroke-width="1.3"/></marker>
+  <marker id="head-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9" fill="none" stroke="#7a2e2e" stroke-width="1.3"/></marker>
+</defs>
+<rect width="1100" height="1220" fill="#fbfaf7"/>
+<text x="48" y="60" font-family="Georgia, 'Times New Roman', serif" font-size="25" fill="#1f1f1f">Commands that change resources</text>
+<text x="48" y="86" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="14" fill="#5e5e5e">A mutating command never runs until the Operator confirms it — and it is checked again when they do.</text>
+<line x1="48" y1="102" x2="1052" y2="102" stroke="#a3a09a" stroke-width="0.8"/>
+<line x1="48" y1="1176" x2="1052" y2="1176" stroke="#a3a09a" stroke-width="0.8"/>
+<text x="48" y="1198" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12" fill="#5e5e5e">Fig. 4 — source: backend/src/ai/orchestrator.js — confirmCommand, cancelCommand</text>
+<text x="1052" y="1198" text-anchor="end" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" letter-spacing="2" fill="#5e5e5e">OPENCAI · WORKFLOWS</text>
+<rect x="250" y="124" width="360" height="44" rx="22" fill="#f1eee8" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="430" y="151" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Mutating command proposed</text>
+<polygon points="430,201 550,244 430,287 310,244" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="430" y="240" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">Session limit</text>
+<text x="430" y="256" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">reached?</text>
+<path d="M430,168 L430,201" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<rect x="700" y="214" width="340" height="60" rx="3" fill="#ffffff" stroke="#7a2e2e" stroke-width="1.5"/>
+<text x="870" y="241" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Capped</text>
+<text x="870" y="257.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">never runs · start a new session</text>
+<path d="M550,244 L700,244" fill="none" stroke="#7a2e2e" stroke-width="1.1" marker-end="url(#head-accent)"/>
+<text x="650" y="236" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#7a2e2e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">yes</text>
+<rect x="250" y="334" width="360" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="430" y="362" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Parked, awaiting confirmation</text>
+<text x="430" y="378.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">audit: command proposed</text>
+<path d="M430,287 L430,334" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<text x="440" y="316" text-anchor="start" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">no</text>
+<polygon points="430,431 550,474 430,517 310,474" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="430" y="470" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">Dry-run</text>
+<text x="430" y="486" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">supported?</text>
+<path d="M430,396 L430,431" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<rect x="700" y="444" width="340" height="60" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="870" y="471" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Run it with --dry-run</text>
+<text x="870" y="487.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">the preview is shown on the card</text>
+<path d="M550,474 L700,474" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<text x="650" y="466" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">yes</text>
+<polygon points="430,571 550,614 430,657 310,614" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="430" y="610" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">The Operator</text>
+<text x="430" y="626" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">decides</text>
+<path d="M430,517 L430,571" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<text x="440" y="548" text-anchor="start" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">no</text>
+<path d="M870,504 L870,614 L550,614" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<rect x="40" y="584" width="170" height="60" rx="3" fill="#f1eee8" stroke="#1f1f1f" stroke-width="1.5"/>
+<text x="125" y="611" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Cancelled</text>
+<text x="125" y="627.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">nothing runs</text>
+<path d="M310,614 L210,614" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<text x="248" y="606" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">cancel</text>
+<rect x="250" y="700" width="360" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="430" y="728" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Claim the command atomically</text>
+<text x="430" y="744.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">a second confirm gets 409 — already resolved</text>
+<path d="M430,657 L430,700" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<text x="440" y="688" text-anchor="start" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">confirm</text>
+<rect x="250" y="800" width="360" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="430" y="828" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Check it with the policy again</text>
+<text x="430" y="844.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">it must still need confirmation</text>
+<path d="M430,762 L430,800" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<rect x="250" y="900" width="360" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="430" y="928" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Take one of the session’s mutating slots</text>
+<text x="430" y="944.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">atomic; capped if the limit was reached meanwhile</text>
+<path d="M430,862 L430,900" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<rect x="250" y="1000" width="360" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="430" y="1028" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Execute in the sandbox</text>
+<text x="430" y="1044.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">argument list only, never a shell string · audit: executed</text>
+<path d="M430,962 L430,1000" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<rect x="700" y="800" width="340" height="62" rx="3" fill="#ffffff" stroke="#7a2e2e" stroke-width="1.5"/>
+<text x="870" y="828" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Marked failed</text>
+<text x="870" y="844.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">policy or mode changed since it was proposed</text>
+<path d="M610,831 L700,831" fill="none" stroke="#7a2e2e" stroke-width="1.1" marker-end="url(#head-accent)"/>
+<text x="655" y="823" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#7a2e2e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">no longer</text>
+<rect x="250" y="1112" width="360" height="44" rx="22" fill="#f1eee8" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="430" y="1139" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">The model continues from the result</text>
+<path d="M430,1062 L430,1112" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+</svg>

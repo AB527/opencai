@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1330" viewBox="0 0 1100 1330">
+<title>The life of a chat request</title>
+<defs>
+  <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9" fill="none" stroke="#1f1f1f" stroke-width="1.3"/></marker>
+  <marker id="head-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9" fill="none" stroke="#7a2e2e" stroke-width="1.3"/></marker>
+</defs>
+<rect width="1100" height="1330" fill="#fbfaf7"/>
+<text x="48" y="60" font-family="Georgia, 'Times New Roman', serif" font-size="25" fill="#1f1f1f">The life of a chat request</text>
+<text x="48" y="86" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="14" fill="#5e5e5e">From the Operator pressing Send to the answer on screen.</text>
+<line x1="48" y1="102" x2="1052" y2="102" stroke="#a3a09a" stroke-width="0.8"/>
+<line x1="48" y1="1286" x2="1052" y2="1286" stroke="#a3a09a" stroke-width="0.8"/>
+<text x="48" y="1308" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12" fill="#5e5e5e">Fig. 2 — source: backend/src/modules/chat, backend/src/ai/orchestrator.js</text>
+<text x="1052" y="1308" text-anchor="end" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10" letter-spacing="2" fill="#5e5e5e">OPENCAI · WORKFLOWS</text>
+<rect x="210" y="124" width="380" height="44" rx="22" fill="#f1eee8" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="400" y="151" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Operator sends a message</text>
+<rect x="210" y="204" width="380" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="400" y="232" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Create the session if needed</text>
+<text x="400" y="248.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">created lazily, on the first message; the URL gains ?session=</text>
+<rect x="210" y="302" width="380" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="400" y="330" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Check and save the message</text>
+<text x="400" y="346.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">refused while a command still awaits confirmation</text>
+<rect x="210" y="400" width="380" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="400" y="428" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Resolve the AI provider</text>
+<text x="400" y="444.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">Chat Settings: provider · model · API key</text>
+<rect x="210" y="498" width="380" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="400" y="526" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Provision the sandbox</text>
+<text x="400" y="542.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">reuse this chat’s container, or start a new one</text>
+<rect x="210" y="596" width="380" height="78" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="400" y="624" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Build the conversation</text>
+<text x="400" y="640.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">the last 40 messages; earlier commands replayed</text>
+<text x="400" y="656.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">as notes; reasoning is never sent back</text>
+<path d="M400,168 L400,204" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<path d="M400,266 L400,302" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<path d="M400,364 L400,400" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<path d="M400,462 L400,498" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<path d="M400,560 L400,596" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<rect x="680" y="400" width="360" height="62" rx="3" fill="#ffffff" stroke="#7a2e2e" stroke-width="1.5"/>
+<text x="860" y="428" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Stops: 503</text>
+<text x="860" y="444.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">no provider or key configured yet</text>
+<rect x="680" y="498" width="360" height="62" rx="3" fill="#ffffff" stroke="#7a2e2e" stroke-width="1.5"/>
+<text x="860" y="526" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Stops with a message</text>
+<text x="860" y="542.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">“The execution environment couldn’t be started.”</text>
+<path d="M590,431 L680,431" fill="none" stroke="#7a2e2e" stroke-width="1.1" marker-end="url(#head-accent)"/>
+<text x="635" y="423" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#7a2e2e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">not set</text>
+<path d="M590,529 L680,529" fill="none" stroke="#7a2e2e" stroke-width="1.1" marker-end="url(#head-accent)"/>
+<text x="635" y="521" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#7a2e2e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">fails</text>
+<rect x="170" y="712" width="890" height="346" rx="4" fill="none" stroke="#a3a09a" stroke-width="1" stroke-dasharray="5 4"/><text x="1046" y="732" text-anchor="end" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="10.5" letter-spacing="1.6" fill="#5e5e5e">AGENT LOOP · AT MOST 8 MODEL CALLS AND 2 MINUTES PER MESSAGE</text>
+<rect x="210" y="752" width="380" height="78" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="400" y="780" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Call the model</text>
+<text x="400" y="796.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">system prompt + tool rules · tools: run_lookup, run_command</text>
+<text x="400" y="812.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">its reasoning, if returned, is saved</text>
+<path d="M400,674 L400,752" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<polygon points="400,867 515,912 400,957 285,912" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="400" y="908" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">Answer or</text>
+<text x="400" y="924" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">tool call?</text>
+<path d="M400,830 L400,867" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<rect x="680" y="881" width="340" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="850" y="909" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Command decision</text>
+<text x="850" y="925.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">classify, then run, reject or park — Fig. 3</text>
+<path d="M515,912 L680,912" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<text x="612" y="904" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">tool call</text>
+<path d="M850,881 L850,791 L590,791" fill="none" stroke="#1f1f1f" stroke-width="1.1" stroke-dasharray="4 3" marker-end="url(#head)"/>
+<text x="838" y="783" text-anchor="end" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">result or refusal fed back</text>
+<text x="196" y="990" text-anchor="start" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="13" fill="#5e5e5e">Out of calls or time →</text>
+<text x="196" y="1007" text-anchor="start" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="13" fill="#5e5e5e">“I’m having trouble</text>
+<text x="196" y="1024" text-anchor="start" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="13" fill="#5e5e5e">completing this…”</text>
+<rect x="210" y="1092" width="380" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="400" y="1120" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Save the answer and context usage</text>
+<text x="400" y="1136.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">tokens used ÷ context window → the header ring</text>
+<path d="M400,957 L400,1092" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<text x="410" y="992" text-anchor="start" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">answer</text>
+<rect x="680" y="1092" width="340" height="62" rx="3" fill="#ffffff" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="850" y="1120" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Waits for the Operator</text>
+<text x="850" y="1136.5" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#5e5e5e">Confirm / Cancel card — Fig. 4</text>
+<path d="M850,943 L850,1092" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+<text x="860" y="1076" text-anchor="start" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12.5" fill="#5e5e5e" stroke="#fbfaf7" stroke-width="4" paint-order="stroke">needs confirmation</text>
+<rect x="210" y="1192" width="380" height="44" rx="22" fill="#f1eee8" stroke="#1f1f1f" stroke-width="1.1"/>
+<text x="400" y="1219" text-anchor="middle" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f1f1f">Reply shown: Thought dropdown + answer</text>
+<path d="M400,1154 L400,1192" fill="none" stroke="#1f1f1f" stroke-width="1.1" marker-end="url(#head)"/>
+</svg>
