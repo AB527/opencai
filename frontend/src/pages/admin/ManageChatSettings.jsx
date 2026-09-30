@@ -8,6 +8,8 @@ export function ManageChatSettings() {
   const [provider, setProvider] = useState('ANTHROPIC');
   const [model, setModel] = useState('');
   const [configText, setConfigText] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [hasApiKey, setHasApiKey] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -18,6 +20,7 @@ export function ManageChatSettings() {
       setProvider(settings.provider);
       setModel(settings.model);
       setConfigText(settings.config ? JSON.stringify(settings.config, null, 2) : '');
+      setHasApiKey(settings.hasApiKey);
     });
   }, [token]);
 
@@ -35,7 +38,15 @@ export function ManageChatSettings() {
           throw new Error('Config must be valid JSON.');
         }
       }
-      await updateChatSettings(token, { provider, model, config });
+      // apiKey is write-only: omitting it leaves the stored key unchanged.
+      const updated = await updateChatSettings(token, {
+        provider,
+        model,
+        config,
+        apiKey: apiKey.trim() || undefined,
+      });
+      setHasApiKey(updated.hasApiKey);
+      setApiKey('');
       setSaved(true);
     } catch (err) {
       setError(err.message);
@@ -79,6 +90,25 @@ export function ManageChatSettings() {
             placeholder="claude-sonnet-5"
             className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-200">API key</label>
+          <input
+            type="password"
+            autoComplete="off"
+            required={!hasApiKey}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={
+              hasApiKey ? '•••••••• (leave blank to keep current key)' : 'Paste provider API key'
+            }
+            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {hasApiKey
+              ? 'A key is saved. Enter a new one only to replace it.'
+              : 'No key saved yet. Chats will not work until one is set.'}
+          </p>
         </div>
         <div>
           <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
