@@ -13,7 +13,17 @@ async function list(req, res, next) {
     const page = Math.max(1, Number(req.query.page) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
     const { search, workspaceId, mode } = req.query;
-    res.json(await service.listSessions(req.user.id, { search, workspaceId, mode, page, pageSize }));
+    const hasMessages = req.query.hasMessages === 'true';
+    res.json(
+      await service.listSessions(req.user.id, {
+        search,
+        workspaceId,
+        mode,
+        hasMessages,
+        page,
+        pageSize,
+      }),
+    );
   } catch (err) {
     next(err);
   }
@@ -35,6 +45,14 @@ async function sendMessage(req, res, next) {
   }
 }
 
+async function rename(req, res, next) {
+  try {
+    res.json(await service.renameSession(req.user.id, req.params.id, req.body.title));
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function confirmMessage(req, res, next) {
   try {
     res.json(await service.confirmPendingCommand(req.user.id, req.params.id, req.params.messageId));
@@ -51,4 +69,4 @@ async function cancelMessage(req, res, next) {
   }
 }
 
-module.exports = { create, list, getOne, sendMessage, confirmMessage, cancelMessage };
+module.exports = { create, list, getOne, rename, sendMessage, confirmMessage, cancelMessage };

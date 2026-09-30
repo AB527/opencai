@@ -1,4 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
+const { REGIONS_PROPERTY, parseRegions } = require('./regionsParam');
 
 const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_TEMPERATURE = 0.2;
@@ -8,14 +9,15 @@ const MALFORMED_FALLBACK_TEXT = "(The model's response could not be parsed.)";
 const RUN_LOOKUP_TOOL = {
   name: 'run_lookup',
   description:
-    'Request a read-only lookup command to be run immediately (e.g. checking CLI syntax with --help, or a describe/list/get call). Use this when you need information before deciding what to do next, or to check exact command syntax.',
+    'Request a read-only lookup command to be run immediately (e.g. reading AWS CLI documentation with "aws <service> <operation> help", or a describe/list/get call). Use this when you need information before deciding what to do next, or to check exact command syntax.',
   input_schema: {
     type: 'object',
     properties: {
       command: {
         type: 'string',
-        description: 'The exact shell command to run, e.g. "aws ec2 describe-instances --help".',
+        description: 'The exact shell command to run, e.g. "aws ec2 describe-instances help".',
       },
+      regions: REGIONS_PROPERTY,
       explanation: {
         type: 'string',
         description: 'Optional one-sentence reason for this lookup.',
@@ -37,6 +39,7 @@ const RUN_COMMAND_TOOL = {
         description:
           'The exact shell command to run, e.g. "aws ec2 terminate-instances --instance-ids i-0abc123".',
       },
+      regions: REGIONS_PROPERTY,
       explanation: {
         type: 'string',
         description:
@@ -57,6 +60,28 @@ function extractText(contentBlocks) {
     .filter((block) => block && block.type === 'text' && typeof block.text === 'string')
     .map((block) => block.text)
     .join('');
+}
+
+// Extended-thinking blocks, when the model returned readable ones. Some models
+// return thinking blocks with empty text; those contribute nothing.
+function extractReasoning(response) {
+  const blocks = Array.isArray(response?.content) ? response.content : [];
+  const text = blocks
+    .filter((block) => block && block.type === 'thinking' && typeof block.thinking === 'string')
+    .map((block) => block.thinking.trim())
+    .filter(Boolean)
+    .join('\n\n');
+  return text || undefined;
+}
+
+// Tokens this call used. Cached prompt tokens are billed separately but still
+// occupy the context window, so they count as input here.
+function extractUsage(response) {
+  const u = response?.usage;
+  if (!u) return undefined;
+  const inputTokens =
+    (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+  return { inputTokens, outputTokens: u.output_tokens ?? 0 };
 }
 
 function parseResponse(response) {
@@ -88,11 +113,14 @@ function parseResponse(response) {
 
   const explanation = typeof input.explanation === 'string' ? input.explanation : undefined;
 
+  const regions = parseRegions(input);
+
   return {
     type,
     content: input.command,
     command: input.command,
     explanation,
+    regions,
   };
 }
 
@@ -115,7 +143,12 @@ async function sendMessage({ systemPrompt, history, newMessage, model, apiKey, b
 
   const parsed = parseResponse(response);
 
-  return { ...parsed, raw: response };
+  return {
+    ...parsed,
+    reasoning: extractReasoning(response),
+    usage: extractUsage(response),
+    raw: response,
+  };
 }
 
 module.exports = { sendMessage };

@@ -216,3 +216,10 @@ test('omitted baseUrl/config falls back to SDK default baseURL and documented de
   assert.equal(lastCreateArgs.max_tokens, 4096);
   assert.equal(lastCreateArgs.temperature, 0.2);
 });
+
+test('reasoning_content is returned as reasoning when present', async () => {
+  createImpl = async () => ({
+    choices: [{ message: { content: 'One instance.', reasoning_content: 'Count the IDs.' } }],
+  });
+  assert.equal((await sendMessage(baseArgs)).reasoning, 'Count the IDs.');
+});

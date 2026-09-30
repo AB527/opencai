@@ -216,3 +216,54 @@ test('omitted baseUrl/config falls back to SDK default baseURL and documented de
   assert.equal(lastCreateArgs.max_tokens, 4096);
   assert.equal(lastCreateArgs.temperature, 0.2);
 });
+
+test('reasoning from message.reasoning is returned trimmed; absent reasoning is undefined', async () => {
+  createImpl = async () => ({
+    choices: [{ message: { content: 'One instance.', reasoning: '  Count the IDs.  ' } }],
+  });
+  assert.equal((await sendMessage(baseArgs)).reasoning, 'Count the IDs.');
+
+  createImpl = async () => ({ choices: [{ message: { content: 'One instance.' } }] });
+  assert.equal((await sendMessage(baseArgs)).reasoning, undefined);
+});
+
+test('usage maps prompt/completion tokens; missing usage is undefined', async () => {
+  createImpl = async () => ({
+    choices: [{ message: { content: 'ok' } }],
+    usage: { prompt_tokens: 900, completion_tokens: 80, total_tokens: 980 },
+  });
+  assert.deepEqual((await sendMessage(baseArgs)).usage, { inputTokens: 900, outputTokens: 80 });
+
+  createImpl = async () => ({ choices: [{ message: { content: 'ok' } }] });
+  assert.equal((await sendMessage(baseArgs)).usage, undefined);
+});
+
+test('regions from tool arguments are passed through, cleaned; absent or empty is undefined', async () => {
+  const call = (args) => ({
+    choices: [
+      {
+        message: {
+          content: null,
+          tool_calls: [{ function: { name: 'run_lookup', arguments: JSON.stringify(args) } }],
+        },
+      },
+    ],
+  });
+  createImpl = async () =>
+    call({ command: 'aws ec2 describe-instances', regions: [' us-east-1 ', '', 7, 'all'] });
+  assert.deepEqual((await sendMessage(baseArgs)).regions, ['us-east-1', 'all']);
+
+  createImpl = async () => call({ command: 'aws ec2 describe-instances', regions: [] });
+  assert.equal((await sendMessage(baseArgs)).regions, undefined);
+
+  createImpl = async () => call({ command: 'aws ec2 describe-instances' });
+  assert.equal((await sendMessage(baseArgs)).regions, undefined);
+});
+
+test('both tools declare the optional regions argument', async () => {
+  await sendMessage(baseArgs);
+  for (const tool of lastCreateArgs.tools) {
+    assert.equal(tool.function.parameters.properties.regions.type, 'array');
+    assert.equal(tool.function.parameters.required.includes('regions'), false);
+  }
+});

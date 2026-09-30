@@ -25,6 +25,10 @@ const service = require('./chat.service');
 const originals = {
   chatSessionFindFirst: prisma.chatSession.findFirst,
   chatSessionCreate: prisma.chatSession.create,
+  chatSessionUpdateMany: prisma.chatSession.updateMany,
+  chatSessionFindUnique: prisma.chatSession.findUnique,
+  chatSessionFindMany: prisma.chatSession.findMany,
+  chatSessionCount: prisma.chatSession.count,
   chatSettingsFindFirst: prisma.chatSettings.findFirst,
   chatMessageFindFirst: prisma.chatMessage.findFirst,
   workspaceFindUnique: prisma.workspace.findUnique,
@@ -39,6 +43,10 @@ const originals = {
 function restoreAll() {
   prisma.chatSession.findFirst = originals.chatSessionFindFirst;
   prisma.chatSession.create = originals.chatSessionCreate;
+  prisma.chatSession.updateMany = originals.chatSessionUpdateMany;
+  prisma.chatSession.findUnique = originals.chatSessionFindUnique;
+  prisma.chatSession.findMany = originals.chatSessionFindMany;
+  prisma.chatSession.count = originals.chatSessionCount;
   prisma.chatSettings.findFirst = originals.chatSettingsFindFirst;
   prisma.chatMessage.findFirst = originals.chatMessageFindFirst;
   prisma.workspace.findUnique = originals.workspaceFindUnique;
@@ -84,7 +92,7 @@ function makeFullSession(over = {}) {
 /* -------------------------------------------------------------------------- */
 
 test('sendMessage: happy path calls orchestrator.handleUserMessage with the decrypted credential', async () => {
-  const session = makeFullSession();
+  const session = makeFullSession({ title: 'already titled' });
   const capturedFindFirstArgs = [];
 
   prisma.chatSession.findFirst = async (args) => {
@@ -407,6 +415,122 @@ test('createSession: both persona cap and ChatSettings missing falls back to the
   try {
     await service.createSession(USER_ID, { workspaceId: 'ws-1', mode: 'AIOPS' });
     assert.equal(getData().mutatingCommandCap, 10);
+  } finally {
+    restoreAll();
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* Session titles                                                              */
+/* -------------------------------------------------------------------------- */
+
+test('titleFromMessage: collapses whitespace and cuts long text at a word boundary', () => {
+  assert.equal(service.titleFromMessage('  how many\n  ec2 instances  '), 'how many ec2 instances');
+  const long = 'list every running ec2 instance in ap-south-1 with its type and launch time please';
+  const title = service.titleFromMessage(long);
+  assert.ok(title.endsWith('…'));
+  assert.ok(title.length <= 61);
+  assert.ok(long.startsWith(title.slice(0, -1)));
+  assert.equal(title.at(-2) === ' ', false);
+});
+
+test('sendMessage: an untitled session is titled from the first message, guarded on title: null', async () => {
+  prisma.chatSession.findFirst = async () => makeFullSession({ title: null });
+  prisma.chatMessage.findFirst = async () => null;
+  envelope.decrypt = () => JSON.stringify({ accessKeyId: 'AKIA', secretAccessKey: 'shh' });
+  orchestrator.handleUserMessage = async () => ({ messages: [] });
+  let updateArgs;
+  prisma.chatSession.updateMany = async (args) => {
+    updateArgs = args;
+    return { count: 1 };
+  };
+
+  try {
+    await service.sendMessage(USER_ID, SESSION_ID, 'how many instances');
+    assert.deepEqual(updateArgs, {
+      where: { id: SESSION_ID, title: null },
+      data: { title: 'how many instances' },
+    });
+  } finally {
+    restoreAll();
+  }
+});
+
+test('sendMessage: a titled session keeps its title', async () => {
+  prisma.chatSession.findFirst = async () => makeFullSession({ title: 'My renamed chat' });
+  prisma.chatMessage.findFirst = async () => null;
+  envelope.decrypt = () => JSON.stringify({ accessKeyId: 'AKIA', secretAccessKey: 'shh' });
+  orchestrator.handleUserMessage = async () => ({ messages: [] });
+  let updated = false;
+  prisma.chatSession.updateMany = async () => {
+    updated = true;
+    return { count: 1 };
+  };
+
+  try {
+    await service.sendMessage(USER_ID, SESSION_ID, 'next question');
+    assert.equal(updated, false);
+  } finally {
+    restoreAll();
+  }
+});
+
+test('renameSession: updates only the caller-owned session and returns it', async () => {
+  let updateArgs;
+  prisma.chatSession.updateMany = async (args) => {
+    updateArgs = args;
+    return { count: 1 };
+  };
+  prisma.chatSession.findUnique = async () => ({ id: SESSION_ID, title: 'Prod audit' });
+
+  try {
+    const result = await service.renameSession(USER_ID, SESSION_ID, 'Prod audit');
+    assert.deepEqual(updateArgs, {
+      where: { id: SESSION_ID, userId: USER_ID },
+      data: { title: 'Prod audit' },
+    });
+    assert.equal(result.title, 'Prod audit');
+  } finally {
+    restoreAll();
+  }
+});
+
+test("renameSession: 404 for another user's (or a missing) session", async () => {
+  prisma.chatSession.updateMany = async () => ({ count: 0 });
+
+  try {
+    await assert.rejects(
+      () => service.renameSession(USER_ID, SESSION_ID, 'x'),
+      (err) => err.status === 404 && err.code === ERROR_CODES.NOT_FOUND,
+    );
+  } finally {
+    restoreAll();
+  }
+});
+
+test('listSessions: hasMessages filters out unused sessions and search covers titles', async () => {
+  let where;
+  prisma.chatSession.findMany = async (args) => {
+    where = args.where;
+    return [];
+  };
+  prisma.chatSession.count = async () => 0;
+
+  try {
+    await service.listSessions(USER_ID, {
+      mode: 'AIOPS',
+      hasMessages: true,
+      search: 'audit',
+      page: 1,
+      pageSize: 5,
+    });
+    assert.equal(where.userId, USER_ID);
+    assert.equal(where.mode, 'AIOPS');
+    assert.deepEqual(where.messages, { some: {} });
+    assert.deepEqual(where.OR[0], { title: { contains: 'audit', mode: 'insensitive' } });
+
+    await service.listSessions(USER_ID, { page: 1, pageSize: 5 });
+    assert.equal(where.messages, undefined);
   } finally {
     restoreAll();
   }

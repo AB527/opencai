@@ -139,7 +139,9 @@ test('baseUrl and config are passed through to the SDK client and call', async (
   });
 
   assert.equal(lastConstructorArgs.apiKey, 'test-gemini-key');
-  assert.deepEqual(lastConstructorArgs.httpOptions, { baseUrl: 'https://custom.gemini.example.com' });
+  assert.deepEqual(lastConstructorArgs.httpOptions, {
+    baseUrl: 'https://custom.gemini.example.com',
+  });
 
   assert.equal(lastGenerateArgs.model, 'gemini-flash-latest');
   assert.equal(lastGenerateArgs.config.systemInstruction, baseArgs.systemPrompt);
@@ -167,4 +169,19 @@ test('omitted baseUrl/config falls back to SDK default and documented defaults',
   assert.equal(lastConstructorArgs.httpOptions, undefined);
   assert.equal(lastGenerateArgs.config.maxOutputTokens, 4096);
   assert.equal(lastGenerateArgs.config.temperature, 0.2);
+});
+
+test('thought parts are returned as reasoning', async () => {
+  generateImpl = async () => ({
+    text: 'One instance.',
+    functionCalls: undefined,
+    candidates: [
+      {
+        content: {
+          parts: [{ text: 'Count the IDs.', thought: true }, { text: 'One instance.' }],
+        },
+      },
+    ],
+  });
+  assert.equal((await sendMessage(baseArgs)).reasoning, 'Count the IDs.');
 });

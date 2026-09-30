@@ -39,6 +39,7 @@ function reset() {
   S.audits = [];
   S.messageUpdateManyArgs = [];
   S.sessionUpdateManyArgs = [];
+  S.sessionUpdates = [];
   S.claimCounts = [];
   S.capCounts = [];
   S.dbMutatingCount = 0;
@@ -131,6 +132,10 @@ const fakePrisma = {
     },
   },
   chatSession: {
+    async update(args) {
+      S.sessionUpdates.push(args);
+      return { id: args.where.id, ...args.data };
+    },
     async updateMany(args) {
       S.sessionUpdateManyArgs.push(args);
       if (S.capCounts.length > 0) return { count: S.capCounts.shift() };
@@ -288,7 +293,7 @@ test('plain text response ends the turn with one assistant TEXT row and no execu
   assert.equal(S.providerCalls.length, 1);
   assert.equal(S.audits.length, 0);
   // The system prompt travels as a provider argument, never as a chat row.
-  assert.equal(S.providerCalls[0].systemPrompt, 'PERSONA PROMPT');
+  assert.ok(S.providerCalls[0].systemPrompt.startsWith('PERSONA PROMPT\n\n'));
   assert.equal(
     messages.some((m) => m.role === 'SYSTEM'),
     false,
@@ -335,10 +340,10 @@ test('lookup request executes immediately and the loop continues for another tur
 
   // The execution result is fed back to the model as the next trigger turn.
   const secondCall = S.providerCalls[1];
-  assert.equal(secondCall.newMessage, 'Result:\nusage: aws ec2');
+  assert.equal(secondCall.newMessage, '(run_lookup result)\nusage: aws ec2');
   assert.deepEqual(secondCall.history.at(-1), {
     role: 'assistant',
-    content: '[proposed] aws ec2 --help',
+    content: '(called run_lookup: aws ec2 --help)',
   });
 
   assert.equal(S.audits.length, 1);
@@ -348,6 +353,264 @@ test('lookup request executes immediately and the loop continues for another tur
   assert.equal(S.audits[0].actorUserId, 'user-1');
   assert.equal(S.audits[0].workspaceId, 'ws-1');
   assert.equal(S.audits[0].chatSessionId, 'sess-1');
+});
+
+test('provider reasoning is persisted as a REASONING row ahead of what that call produced', async () => {
+  reset();
+  const session = makeSession();
+  S.providerResponses = [
+    {
+      type: 'lookup_request',
+      content: 'aws ec2 --help',
+      command: 'aws ec2 --help',
+      reasoning: '  Need the ec2 syntax first.  ',
+    },
+    { type: 'text', content: 'Done.', reasoning: '   ' },
+  ];
+  S.classifyResults = [
+    verdict({ verdict: POLICY_VERDICTS.ALLOW_LOOKUP, argv: ['aws', 'ec2', '--help'] }),
+  ];
+  S.execResults = [{ stdout: 'usage', stderr: '', exitCode: 0, timedOut: false }];
+
+  const { messages } = await handleUserMessage({
+    session,
+    workspace: WORKSPACE,
+    credential: CREDENTIAL,
+    userId: 'user-1',
+    text: 'help',
+  });
+
+  // Blank reasoning on the second call produces no row.
+  assert.deepEqual(kinds(messages), [
+    'USER/TEXT/null',
+    'ASSISTANT/REASONING/null',
+    'ASSISTANT/LOOKUP_REQUEST/EXECUTED',
+    'ASSISTANT/COMMAND_RESULT/EXECUTED',
+    'ASSISTANT/TEXT/null',
+  ]);
+  assert.equal(messages[1].content, 'Need the ec2 syntax first.');
+  // Reasoning from the first call is not fed into the second call.
+  assert.equal(
+    S.providerCalls[1].history.some((h) => h.content.includes('Need the ec2 syntax')),
+    false,
+  );
+});
+
+test("the last model call's token usage is saved on the session and returned", async () => {
+  reset();
+  S.settings.model = 'claude-haiku-4-5';
+  const session = makeSession();
+  S.providerResponses = [
+    {
+      type: 'lookup_request',
+      content: 'aws ec2 help',
+      command: 'aws ec2 help',
+      usage: { inputTokens: 1000, outputTokens: 50 },
+    },
+    { type: 'text', content: 'Done.', usage: { inputTokens: 3000, outputTokens: 200 } },
+  ];
+  S.classifyResults = [
+    verdict({ verdict: POLICY_VERDICTS.ALLOW_LOOKUP, argv: ['aws', 'ec2', 'help'] }),
+  ];
+  S.execResults = [{ stdout: 'docs', stderr: '', exitCode: 0, timedOut: false }];
+
+  const result = await handleUserMessage({
+    session,
+    workspace: WORKSPACE,
+    credential: CREDENTIAL,
+    userId: 'user-1',
+    text: 'docs',
+  });
+
+  assert.deepEqual(result.context, { tokens: 3200, window: 200_000 });
+  assert.deepEqual(S.sessionUpdates, [
+    { where: { id: 'sess-1' }, data: { contextTokens: 3200, contextWindow: 200_000 } },
+  ]);
+});
+
+test('no usage reported means nothing is saved and context is null', async () => {
+  reset();
+  const session = makeSession();
+  S.providerResponses = [{ type: 'text', content: 'Hi.' }];
+
+  const result = await handleUserMessage({
+    session,
+    workspace: WORKSPACE,
+    credential: CREDENTIAL,
+    userId: 'user-1',
+    text: 'hi',
+  });
+
+  assert.equal(result.context, null);
+  assert.equal(S.sessionUpdates.length, 0);
+});
+
+/* ---- Multi-region runs ---------------------------------------------------- */
+
+async function sendWithRegions({ regions, classification, execResults, command }) {
+  reset();
+  const session = makeSession();
+  const cmd = command ?? 'aws ec2 describe-instances';
+  S.providerResponses = [
+    { type: 'lookup_request', content: cmd, command: cmd, regions },
+    { type: 'text', content: 'Summary.' },
+  ];
+  S.classifyResults = [classification ?? verdict({ argv: cmd.split(' ') })];
+  S.execResults = execResults ?? [];
+  const { messages } = await handleUserMessage({
+    session,
+    workspace: WORKSPACE,
+    credential: CREDENTIAL,
+    userId: 'user-1',
+    text: 'check regions',
+  });
+  return messages;
+}
+
+test('regions: one step runs the command in each listed region and combines the output', async () => {
+  const messages = await sendWithRegions({
+    regions: ['ap-south-1', 'eu-north-1'],
+    execResults: [
+      { stdout: 'i-0abc stopped', stderr: '', exitCode: 0, timedOut: false },
+      { stdout: '', stderr: '', exitCode: 0, timedOut: false },
+    ],
+  });
+
+  assert.deepEqual(kinds(messages), [
+    'USER/TEXT/null',
+    'ASSISTANT/LOOKUP_REQUEST/EXECUTED',
+    'ASSISTANT/COMMAND_RESULT/EXECUTED',
+    'ASSISTANT/TEXT/null',
+  ]);
+  assert.equal(messages[1].content, 'aws ec2 describe-instances [regions: ap-south-1, eu-north-1]');
+  assert.equal(
+    messages[2].content,
+    '=== ap-south-1 (exit 0) ===\ni-0abc stopped\n\n=== eu-north-1 (exit 0) ===\n(no output)',
+  );
+  assert.deepEqual(
+    S.execCalls.map((c) => c.argv),
+    [
+      ['aws', 'ec2', 'describe-instances', '--region', 'ap-south-1'],
+      ['aws', 'ec2', 'describe-instances', '--region', 'eu-north-1'],
+    ],
+  );
+  // One model step for all regions, then the answer.
+  assert.equal(S.providerCalls.length, 2);
+  assert.ok(S.providerCalls[1].newMessage.startsWith('(run_lookup result)\n=== ap-south-1'));
+  assert.equal(S.audits.length, 1);
+  assert.deepEqual(S.audits[0].metadata, {
+    command: ['aws', 'ec2', 'describe-instances'],
+    regions: ['ap-south-1', 'eu-north-1'],
+    exitCodes: { 'ap-south-1': 0, 'eu-north-1': 0 },
+  });
+  assert.equal(S.audits[0].outcome, AUDIT_OUTCOMES.SUCCESS);
+});
+
+test('regions: ["all"] lists enabled regions first and reports partial failure', async () => {
+  const messages = await sendWithRegions({
+    regions: ['all'],
+    execResults: [
+      { stdout: 'us-east-1\teu-west-1\n', stderr: '', exitCode: 0, timedOut: false },
+      { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false },
+      { stdout: '', stderr: 'AuthFailure', exitCode: 254, timedOut: false },
+    ],
+  });
+
+  assert.deepEqual(S.execCalls[0].argv, [
+    'aws',
+    'ec2',
+    'describe-regions',
+    '--region',
+    'us-east-1',
+    '--query',
+    'Regions[].RegionName',
+    '--output',
+    'text',
+  ]);
+  assert.deepEqual(
+    S.execCalls.slice(1).map((c) => c.argv.at(-1)),
+    ['us-east-1', 'eu-west-1'],
+  );
+  assert.equal(messages[1].status, CHAT_MESSAGE_STATUS.EXECUTED);
+  assert.ok(messages[2].content.includes('=== eu-west-1 (exit 254) ===\nAuthFailure'));
+  assert.ok(
+    S.providerCalls[1].newMessage.startsWith('(run_lookup result, failed in 1 of 2 regions)'),
+  );
+  assert.equal(S.audits[0].outcome, AUDIT_OUTCOMES.FAILURE);
+});
+
+test('regions: failing everywhere marks the step FAILED', async () => {
+  const messages = await sendWithRegions({
+    regions: ['us-east-1', 'us-west-2'],
+    execResults: [
+      { stdout: '', stderr: 'denied', exitCode: 254, timedOut: false },
+      { stdout: '', stderr: '', exitCode: null, timedOut: true },
+    ],
+  });
+  assert.equal(messages[1].status, CHAT_MESSAGE_STATUS.FAILED);
+  assert.ok(messages[2].content.includes('=== us-west-2 (timed out) ==='));
+  assert.ok(S.providerCalls[1].newMessage.startsWith('(run_lookup failed in all 2 regions)'));
+});
+
+test('regions: refused, never executed, for mutating commands, --region conflicts and bad names', async () => {
+  const cases = [
+    {
+      classification: verdict({
+        verdict: POLICY_VERDICTS.REQUIRE_CONFIRMATION,
+        argv: ['aws', 'ec2', 'stop-instances', '--instance-ids', 'i-1'],
+      }),
+      command: 'aws ec2 stop-instances --instance-ids i-1',
+      regions: ['us-east-1'],
+      expect: 'only allowed for read-only commands',
+    },
+    {
+      classification: verdict({
+        argv: ['aws', 'ec2', 'describe-instances', '--region', 'us-east-1'],
+      }),
+      command: 'aws ec2 describe-instances --region us-east-1',
+      regions: ['eu-west-1'],
+      expect: 'remove --region',
+    },
+    { regions: ['us-east-1', 'x; rm -rf /'], expect: 'invalid region name(s): x; rm -rf /' },
+  ];
+  for (const c of cases) {
+    const messages = await sendWithRegions(c);
+    assert.equal(S.execCalls.length, 0, c.expect);
+    assert.equal(messages[1].status, CHAT_MESSAGE_STATUS.REJECTED, c.expect);
+    assert.ok(messages[2].content.includes(c.expect), `${messages[2].content} / ${c.expect}`);
+    assert.equal(S.audits[0].action, AUDIT_ACTIONS.COMMAND_REJECTED);
+    assert.deepEqual(S.audits[0].metadata.regions, c.regions);
+    // The model is told why, and gets another turn to recover.
+    assert.ok(S.providerCalls[1].newMessage.startsWith('(run_lookup rejected by policy)'));
+  }
+});
+
+test('large output is capped in what the model sees but persisted in full', async () => {
+  reset();
+  const session = makeSession();
+  const big = 'x'.repeat(12000) + 'TAIL';
+  S.providerResponses = [
+    { type: 'lookup_request', content: 'aws ec2 help', command: 'aws ec2 help' },
+    { type: 'text', content: 'ok' },
+  ];
+  S.classifyResults = [
+    verdict({ verdict: POLICY_VERDICTS.ALLOW_LOOKUP, argv: ['aws', 'ec2', 'help'] }),
+  ];
+  S.execResults = [{ stdout: big, stderr: '', exitCode: 0, timedOut: false }];
+
+  const { messages } = await handleUserMessage({
+    session,
+    workspace: WORKSPACE,
+    credential: CREDENTIAL,
+    userId: 'user-1',
+    text: 'docs',
+  });
+
+  assert.equal(messages[2].content, big);
+  const seen = S.providerCalls[1].newMessage;
+  assert.ok(seen.startsWith('(run_lookup result)\nxxx'));
+  assert.ok(seen.endsWith('\n[... 4 more characters not shown]'));
+  assert.equal(seen.includes('TAIL'), false);
 });
 
 test('read-only command executes immediately as a COMMAND_REQUEST/COMMAND_RESULT pair', async () => {
@@ -372,12 +635,14 @@ test('read-only command executes immediately as a COMMAND_REQUEST/COMMAND_RESULT
     text: 'list instances',
   });
 
+  // A non-zero exit marks the pair FAILED, and the model is told so.
   assert.deepEqual(kinds(messages), [
     'USER/TEXT/null',
-    'ASSISTANT/COMMAND_REQUEST/EXECUTED',
-    'ASSISTANT/COMMAND_RESULT/EXECUTED',
+    'ASSISTANT/COMMAND_REQUEST/FAILED',
+    'ASSISTANT/COMMAND_RESULT/FAILED',
     'ASSISTANT/TEXT/null',
   ]);
+  assert.equal(S.providerCalls[1].newMessage, '(run_command failed, exit code 1)\nout\nwarn');
   // Both streams are sanitized and combined into one blob, stored twice.
   assert.equal(messages[2].content, 'out\nwarn');
   assert.equal(messages[2].commandOutput, 'out\nwarn');
@@ -517,10 +782,13 @@ test('dry-run that throws still yields a COMMAND_RESULT row and does not break t
   assert.equal(messages[2].content, '(dry-run failed to execute)');
 });
 
-test('REJECTED classification produces the request row plus an explanation and stops', async () => {
+test('REJECTED classification never executes and feeds the reason back so the model can recover', async () => {
   reset();
   const session = makeSession();
-  S.providerResponses = [{ type: 'command_request', content: 'rm -rf /', command: 'rm -rf /' }];
+  S.providerResponses = [
+    { type: 'command_request', content: 'rm -rf /', command: 'rm -rf /' },
+    { type: 'text', content: 'I cannot delete files here.' },
+  ];
   S.classifyResults = [
     verdict({
       verdict: POLICY_VERDICTS.REJECTED,
@@ -542,12 +810,22 @@ test('REJECTED classification produces the request row plus an explanation and s
   assert.deepEqual(kinds(messages), [
     'USER/TEXT/null',
     'ASSISTANT/COMMAND_REQUEST/REJECTED',
+    'ASSISTANT/COMMAND_RESULT/REJECTED',
     'ASSISTANT/TEXT/null',
   ]);
   assert.equal(messages[1].content, 'rm -rf /');
   assert.equal(messages[2].content, 'I can\'t run that: Binary "rm" is not allowed in this mode');
+  assert.equal(messages[3].content, 'I cannot delete files here.');
   assert.equal(S.execCalls.length, 0);
-  assert.equal(S.providerCalls.length, 1);
+  assert.equal(S.providerCalls.length, 2);
+  assert.deepEqual(S.providerCalls[1].history.at(-1), {
+    role: 'assistant',
+    content: '(called run_command: rm -rf /)',
+  });
+  assert.equal(
+    S.providerCalls[1].newMessage,
+    '(run_command rejected by policy)\nI can\'t run that: Binary "rm" is not allowed in this mode',
+  );
   assert.equal(S.audits.length, 1);
   assert.equal(S.audits[0].action, AUDIT_ACTIONS.COMMAND_REJECTED);
   assert.equal(S.audits[0].outcome, AUDIT_OUTCOMES.REJECTED);
@@ -785,6 +1063,17 @@ test('history from prior rows is replayed in order and the new user text is the 
       createdAt: nextDate(),
     },
     {
+      // Display-only: must never be replayed to the model.
+      id: 'old-4',
+      sessionId: 'sess-1',
+      role: 'ASSISTANT',
+      kind: 'REASONING',
+      content: 'The user has two instances, so...',
+      commandOutput: null,
+      status: null,
+      createdAt: nextDate(),
+    },
+    {
       id: 'other-session',
       sessionId: 'sess-2',
       role: 'USER',
@@ -808,8 +1097,8 @@ test('history from prior rows is replayed in order and the new user text is the 
   const call = S.providerCalls[0];
   assert.deepEqual(call.history, [
     { role: 'user', content: 'hello' },
-    { role: 'assistant', content: '[proposed] aws ec2 describe-instances' },
-    { role: 'user', content: 'Result:\ntwo instances' },
+    { role: 'assistant', content: '(called run_command: aws ec2 describe-instances)' },
+    { role: 'user', content: '(run_command result)\ntwo instances' },
   ]);
   assert.equal(call.newMessage, 'and now?');
 });
@@ -967,9 +1256,9 @@ test('confirmCommand executes the command, records the result and continues the 
   const call = S.providerCalls[0];
   assert.deepEqual(call.history.at(-1), {
     role: 'assistant',
-    content: '[proposed] aws s3 rb s3://b',
+    content: '(called run_command: aws s3 rb s3://b)',
   });
-  assert.equal(call.newMessage, 'Result:\nremove_bucket: b');
+  assert.equal(call.newMessage, '(run_command result)\nremove_bucket: b');
 });
 
 test('confirmCommand marks the message FAILED when the command exits non-zero', async () => {

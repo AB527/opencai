@@ -11,4 +11,8 @@ const sendMessageSchema = z.object({
   text: z.string().min(1).max(4000),
 });
 
-module.exports = { createSessionSchema, sendMessageSchema };
+const renameSessionSchema = z.object({
+  title: z.string().trim().min(1).max(100),
+});
+
+module.exports = { createSessionSchema, sendMessageSchema, renameSessionSchema };

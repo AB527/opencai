@@ -183,3 +183,45 @@ test('omitted baseUrl/config falls back to SDK default baseURL and documented de
   assert.equal(lastCreateArgs.max_tokens, 4096);
   assert.equal(lastCreateArgs.temperature, 0.2);
 });
+
+test('non-empty thinking blocks are joined into reasoning; empty ones are ignored', async () => {
+  createImpl = async () => ({
+    content: [
+      { type: 'thinking', thinking: 'First, list instances.', signature: 's1' },
+      { type: 'thinking', thinking: '', signature: 's2' },
+      { type: 'text', text: 'One instance.' },
+    ],
+  });
+  const result = await sendMessage(baseArgs);
+  assert.equal(result.reasoning, 'First, list instances.');
+  assert.equal(result.content, 'One instance.');
+
+  createImpl = async () => ({ content: [{ type: 'text', text: 'One instance.' }] });
+  assert.equal((await sendMessage(baseArgs)).reasoning, undefined);
+});
+
+test('usage counts cached prompt tokens as input', async () => {
+  createImpl = async () => ({
+    content: [{ type: 'text', text: 'ok' }],
+    usage: {
+      input_tokens: 100,
+      cache_read_input_tokens: 2000,
+      cache_creation_input_tokens: 300,
+      output_tokens: 40,
+    },
+  });
+  assert.deepEqual((await sendMessage(baseArgs)).usage, { inputTokens: 2400, outputTokens: 40 });
+});
+
+test('regions from tool_use input are passed through', async () => {
+  createImpl = async () => ({
+    content: [
+      {
+        type: 'tool_use',
+        name: 'run_lookup',
+        input: { command: 'aws ec2 describe-instances', regions: ['all'] },
+      },
+    ],
+  });
+  assert.deepEqual((await sendMessage(baseArgs)).regions, ['all']);
+});

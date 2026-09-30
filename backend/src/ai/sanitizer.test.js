@@ -214,3 +214,11 @@ test('always returns a string, coercing other non-string inputs', () => {
     assert.equal(typeof sanitizeOutput(value), 'string');
   }
 });
+
+test('strips terminal escape sequences, including ones splitting a key ID', () => {
+  assert.equal(
+    sanitizeOutput('\x1b[1mNAME\x1b[0m\n  describe-instances'),
+    'NAME\n  describe-instances',
+  );
+  assert.equal(sanitizeOutput('key AKIA\x1b[1mIOSFODNN7EXAMPLE'), 'key [REDACTED]');
+});

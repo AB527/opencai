@@ -10,6 +10,9 @@ const SESSION_SELECT = {
   id: true,
   mode: true,
   subMode: true,
+  title: true,
+  contextTokens: true,
+  contextWindow: true,
   createdAt: true,
   updatedAt: true,
   workspace: {
@@ -49,12 +52,16 @@ async function createSession(userId, { workspaceId, mode, subMode }) {
   });
 }
 
-async function listSessions(userId, { search, workspaceId, mode, page, pageSize }) {
+async function listSessions(userId, { search, workspaceId, mode, hasMessages, page, pageSize }) {
   const where = { userId };
   if (workspaceId) where.workspaceId = workspaceId;
   if (mode) where.mode = mode;
+  // Sessions are created as soon as a mode is opened, so most lists want only
+  // the ones that were actually used.
+  if (hasMessages) where.messages = { some: {} };
   if (search) {
     where.OR = [
+      { title: { contains: search, mode: 'insensitive' } },
       { workspace: { account: { contains: search, mode: 'insensitive' } } },
       { workspace: { environment: { contains: search, mode: 'insensitive' } } },
       { workspace: { organisation: { name: { contains: search, mode: 'insensitive' } } } },
@@ -98,8 +105,21 @@ async function loadSessionWithCredential(userId, sessionId) {
     throw new AppError(422, ERROR_CODES.WORKSPACE_CREDENTIAL_MISSING);
   }
 
-  const credential = JSON.parse(envelope.decrypt(session.workspace.credential.encryptedCredentials));
+  const credential = JSON.parse(
+    envelope.decrypt(session.workspace.credential.encryptedCredentials),
+  );
   return { session, workspace: session.workspace, credential };
+}
+
+const MAX_AUTO_TITLE_LENGTH = 60;
+
+/** A session title from the first message: one line, cut at a word boundary. */
+function titleFromMessage(text) {
+  const oneLine = text.replace(/\s+/g, ' ').trim();
+  if (oneLine.length <= MAX_AUTO_TITLE_LENGTH) return oneLine;
+  const cut = oneLine.slice(0, MAX_AUTO_TITLE_LENGTH);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > 20 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }
 
 async function sendMessage(userId, sessionId, text) {
@@ -112,12 +132,29 @@ async function sendMessage(userId, sessionId, text) {
     throw new AppError(409, ERROR_CODES.PENDING_COMMAND_EXISTS);
   }
 
+  // Only while untitled, so an Operator's rename is never overwritten.
+  if (!session.title) {
+    await prisma.chatSession.updateMany({
+      where: { id: sessionId, title: null },
+      data: { title: titleFromMessage(text) },
+    });
+  }
+
   return orchestrator.handleUserMessage({ session, workspace, credential, userId, text });
 }
 
 async function confirmPendingCommand(userId, sessionId, messageId) {
   const { session, workspace, credential } = await loadSessionWithCredential(userId, sessionId);
   return orchestrator.confirmCommand({ session, workspace, credential, messageId, userId });
+}
+
+async function renameSession(userId, sessionId, title) {
+  const { count } = await prisma.chatSession.updateMany({
+    where: { id: sessionId, userId },
+    data: { title },
+  });
+  if (count !== 1) throw new AppError(404, ERROR_CODES.NOT_FOUND);
+  return prisma.chatSession.findUnique({ where: { id: sessionId }, select: SESSION_SELECT });
 }
 
 async function cancelPendingCommand(userId, sessionId, messageId) {
@@ -127,6 +164,8 @@ async function cancelPendingCommand(userId, sessionId, messageId) {
 }
 
 module.exports = {
+  titleFromMessage,
+  renameSession,
   createSession,
   listSessions,
   getSession,

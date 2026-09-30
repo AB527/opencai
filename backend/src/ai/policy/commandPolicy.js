@@ -104,6 +104,22 @@ function classify({ mode, subMode, commandString, personaAllowedBinaries }) {
     };
   }
 
+  // 6b. `help` is how AWS CLI v2 prints documentation (it rejects `--help`).
+  //     It is a help request only as the final token directly after the
+  //     binary, service or operation -- `aws help`, `aws ec2 help`,
+  //     `aws ec2 describe-instances help` -- so only those exact shapes count.
+  //     Anywhere else "help" is an ordinary argument and gets classified below.
+  if (argv.length >= 2 && argv.length <= 4 && argv[argv.length - 1] === 'help') {
+    return {
+      verdict: POLICY_VERDICTS.ALLOW_LOOKUP,
+      reason: null,
+      dryRunCapable: false,
+      argv,
+      binary,
+      verb: argv[1],
+    };
+  }
+
   // 7. Structure check: `aws <service> <operation> [args...]`.
   if (argv.length < 3) {
     return reject('Command is missing a service or operation', argv, binary);

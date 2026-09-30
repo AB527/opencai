@@ -1,4 +1,5 @@
 const OpenAI = require('openai');
+const { REGIONS_PROPERTY, parseRegions } = require('./regionsParam');
 
 const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_TEMPERATURE = 0.2;
@@ -10,8 +11,9 @@ const RUN_LOOKUP_PARAMETERS = {
   properties: {
     command: {
       type: 'string',
-      description: 'The exact shell command to run, e.g. "aws ec2 describe-instances --help".',
+      description: 'The exact shell command to run, e.g. "aws ec2 describe-instances help".',
     },
+    regions: REGIONS_PROPERTY,
     explanation: {
       type: 'string',
       description: 'Optional one-sentence reason for this lookup.',
@@ -28,6 +30,7 @@ const RUN_COMMAND_PARAMETERS = {
       description:
         'The exact shell command to run, e.g. "aws ec2 terminate-instances --instance-ids i-0abc123".',
     },
+    regions: REGIONS_PROPERTY,
     explanation: {
       type: 'string',
       description:
@@ -42,7 +45,7 @@ const RUN_LOOKUP_TOOL = {
   function: {
     name: 'run_lookup',
     description:
-      'Request a read-only lookup command to be run immediately (e.g. checking CLI syntax with --help, or a describe/list/get call). Use this when you need information before deciding what to do next, or to check exact command syntax.',
+      'Request a read-only lookup command to be run immediately (e.g. reading AWS CLI documentation with "aws <service> <operation> help", or a describe/list/get call). Use this when you need information before deciding what to do next, or to check exact command syntax.',
     parameters: RUN_LOOKUP_PARAMETERS,
   },
 };
@@ -61,6 +64,21 @@ const TOOL_NAME_TO_TYPE = {
   run_lookup: 'lookup_request',
   run_command: 'command_request',
 };
+
+// Reasoning models on OpenAI-compatible APIs return their reasoning next to the
+// answer: Groq uses `message.reasoning`, several others `reasoning_content`.
+function extractReasoning(response) {
+  const message = response?.choices?.[0]?.message ?? {};
+  const reasoning = message.reasoning ?? message.reasoning_content;
+  return typeof reasoning === 'string' && reasoning.trim() ? reasoning.trim() : undefined;
+}
+
+// Tokens this call used, from the OpenAI-compatible `usage` block.
+function extractUsage(response) {
+  const u = response?.usage;
+  if (!u) return undefined;
+  return { inputTokens: u.prompt_tokens ?? 0, outputTokens: u.completion_tokens ?? 0 };
+}
 
 function parseResponse(response) {
   const message = response?.choices?.[0]?.message ?? {};
@@ -97,11 +115,14 @@ function parseResponse(response) {
 
   const explanation = typeof args.explanation === 'string' ? args.explanation : undefined;
 
+  const regions = parseRegions(args);
+
   return {
     type,
     content: args.command,
     command: args.command,
     explanation,
+    regions,
   };
 }
 
@@ -125,7 +146,12 @@ async function sendMessage({ systemPrompt, history, newMessage, model, apiKey, b
 
   const parsed = parseResponse(response);
 
-  return { ...parsed, raw: response };
+  return {
+    ...parsed,
+    reasoning: extractReasoning(response),
+    usage: extractUsage(response),
+    raw: response,
+  };
 }
 
 module.exports = { sendMessage };

@@ -30,6 +30,7 @@ const { POLICY_VERDICTS } = require('./policy/policyVerdicts');
 const { sanitizeOutput } = require('./sanitizer');
 const { credentialToEnv } = require('./credentials');
 const { provisionSandbox, executeInSandbox } = require('./sandbox/sandboxManager');
+const { contextWindowFor } = require('./contextWindows');
 
 // How many prior ChatMessage rows are replayed into the model's context.
 // Deliberately local: nothing outside this orchestrator has an opinion on it.
@@ -44,7 +45,32 @@ const KIND = Object.freeze({
   LOOKUP_REQUEST: 'LOOKUP_REQUEST',
   COMMAND_REQUEST: 'COMMAND_REQUEST',
   COMMAND_RESULT: 'COMMAND_RESULT',
+  // The model's own reasoning for one provider call, when the provider returns
+  // it. Display-only: never replayed into the model's context.
+  REASONING: 'REASONING',
 });
+
+const KIND_TO_TOOL = Object.freeze({
+  [KIND.LOOKUP_REQUEST]: 'run_lookup',
+  [KIND.COMMAND_REQUEST]: 'run_command',
+});
+
+// Appended to every persona prompt. History replays past tool calls as plain
+// text notes (see buildHistoryFromMessages), and without this rule models
+// imitate those notes in their reply text instead of calling the tool -- the
+// command then never runs and the note is shown to the Operator as an answer.
+const TOOL_CALL_RULES = [
+  'Earlier tool calls appear in this conversation as system-written notes like "(called run_command: <command>)", each followed by a "(<tool> result)", "(<tool> failed, ...)" or "(<tool> rejected by policy)" message.',
+  'Never write such a note yourself. Writing a command in your reply does not run it: the only way to run a command is to call the run_lookup or run_command tool.',
+  'When a command fails, read the error and fix it yourself before involving the Operator. If you are unsure of the correct syntax or parameters, look them up with run_lookup and "aws <service> <operation> help" (this AWS CLI does not accept --help), then retry with a corrected command.',
+  'When a command is rejected by policy, it was not run; do not repeat it. Use a different, allowed command to get the same information.',
+  'To run the same read-only command in several AWS regions, call the tool once with the "regions" argument (a list of region names, or ["all"] for every enabled region) instead of making one call per region. Leave --region out of that command.',
+  'Ask the Operator only for information you cannot discover with a command, such as which AWS region they mean when none is configured.',
+  "Once you have the information you need, answer the Operator's question directly in plain language.",
+].join('\n');
+
+// Longest command output passed back to the model in one result note.
+const MAX_MODEL_OUTPUT_CHARS = 12000;
 
 const SANDBOX_UNAVAILABLE_TEXT = "The execution environment couldn't be started. Please try again.";
 const BUDGET_EXHAUSTED_TEXT =
@@ -71,6 +97,7 @@ async function resolveProviderConfig() {
 
   return {
     provider,
+    providerName: settings.provider,
     model: settings.model,
     apiKey,
     baseUrl: settings.baseUrl || undefined,
@@ -79,6 +106,147 @@ async function resolveProviderConfig() {
     sandboxIdleTimeoutMinutes: settings.sandboxIdleTimeoutMinutes,
   };
 }
+
+function toolCallNote(kind, commandText) {
+  return { role: 'assistant', content: `(called ${KIND_TO_TOOL[kind]}: ${commandText})` };
+}
+
+/**
+ * The model-facing copy of a command's output. Capped so one large output (a
+ * full `help` page runs to ~2,000 lines) cannot crowd out the conversation or
+ * exhaust the provider's token limits; the persisted row keeps everything.
+ *
+ * `outcome` is 'result', 'failed' / 'failed, exit code N', or
+ * 'rejected by policy' -- the model needs to know a command did not succeed
+ * to decide to check the documentation and retry.
+ */
+function toolResultNote(kind, output, outcome = 'result') {
+  const text =
+    output.length > MAX_MODEL_OUTPUT_CHARS
+      ? `${output.slice(0, MAX_MODEL_OUTPUT_CHARS)}\n[... ${output.length - MAX_MODEL_OUTPUT_CHARS} more characters not shown]`
+      : output;
+  return { role: 'user', content: `(${KIND_TO_TOOL[kind]} ${outcome})\n${text}` };
+}
+
+function executionOutcome(execution) {
+  if (execution.timedOut) return 'failed, timed out';
+  return execution.exitCode === 0 ? 'result' : `failed, exit code ${execution.exitCode}`;
+}
+
+/* ---- Multi-region runs ---------------------------------------------------- */
+
+// Most regions one multi-region step may run in, and how many of those run at
+// once inside the sandbox.
+const MAX_FANOUT_REGIONS = 25;
+const FANOUT_CONCURRENCY = 6;
+// AWS region names: us-east-1, ap-southeast-2, us-gov-west-1, ... Anything
+// else is refused, so a region can never smuggle another argument in.
+const REGION_NAME = /^[a-z]{2}(-[a-z]+)+-\d{1,2}$/;
+// Fixed, backend-owned lookup behind regions: ["all"]. describe-regions only
+// lists regions enabled on the account; us-east-1 is always reachable.
+const LIST_REGIONS_ARGV = Object.freeze([
+  'aws',
+  'ec2',
+  'describe-regions',
+  '--region',
+  'us-east-1',
+  '--query',
+  'Regions[].RegionName',
+  '--output',
+  'text',
+]);
+
+function withRegionsLabel(commandText, regions) {
+  return `${commandText} [regions: ${regions.join(', ')}]`;
+}
+
+/** Why a multi-region request cannot run, or null when it can. */
+function regionsProblem(regions, argv, isReadOnly) {
+  if (!isReadOnly) {
+    return 'running in several regions is only allowed for read-only commands. Propose changes one region at a time.';
+  }
+  if (argv.includes('--region')) {
+    return 'remove --region from the command when passing regions.';
+  }
+  if (regions.includes('all')) return null;
+  const invalid = regions.filter((r) => !REGION_NAME.test(r));
+  if (invalid.length > 0) return `invalid region name(s): ${invalid.join(', ')}.`;
+  if (regions.length > MAX_FANOUT_REGIONS) {
+    return `at most ${MAX_FANOUT_REGIONS} regions per step; split the request.`;
+  }
+  return null;
+}
+
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+/**
+ * Run a read-only argv once per region (appending `--region <name>`), in
+ * parallel, and combine the results into one output with a section per region.
+ * `regions: ["all"]` expands to the regions enabled on the account.
+ *
+ * @returns {Promise<{ regions: string[], exitCodes: Record<string, number|null>,
+ *                     output: string, outcome: string }>}
+ */
+async function runAcrossRegions(containerId, argv, requested, options) {
+  let regions = requested;
+  let skipped = [];
+  if (requested.includes('all')) {
+    const listing = await executeInSandbox(containerId, [...LIST_REGIONS_ARGV], options);
+    const names = (listing.stdout || '').split(/\s+/).filter((r) => REGION_NAME.test(r));
+    if (listing.exitCode !== 0 || names.length === 0) {
+      return {
+        regions: [],
+        exitCodes: {},
+        output: `Could not list the account's regions:\n${combineOutput(listing)}`,
+        outcome: 'failed, could not list regions',
+      };
+    }
+    regions = names.slice(0, MAX_FANOUT_REGIONS);
+    skipped = names.slice(MAX_FANOUT_REGIONS);
+  }
+
+  const executions = await mapWithConcurrency(regions, FANOUT_CONCURRENCY, (region) =>
+    executeInSandbox(containerId, [...argv, '--region', region], options),
+  );
+
+  const exitCodes = {};
+  const sections = regions.map((region, i) => {
+    const execution = executions[i];
+    exitCodes[region] = execution.timedOut ? null : execution.exitCode;
+    const status = execution.timedOut ? 'timed out' : `exit ${execution.exitCode}`;
+    const text = combineOutput(execution).trim();
+    return `=== ${region} (${status}) ===\n${text || '(no output)'}`;
+  });
+
+  const failed = regions.filter((r) => exitCodes[r] !== 0).length;
+  let outcome = 'result';
+  if (failed === regions.length) outcome = `failed in all ${regions.length} regions`;
+  else if (failed > 0) outcome = `result, failed in ${failed} of ${regions.length} regions`;
+
+  if (skipped.length > 0) {
+    sections.push(
+      `=== not checked (limit ${MAX_FANOUT_REGIONS} regions per step) ===\n${skipped.join(' ')}`,
+    );
+  }
+
+  return { regions, exitCodes, output: sections.join('\n\n'), outcome };
+}
+
+const STATUS_TO_OUTCOME = Object.freeze({
+  [CHAT_MESSAGE_STATUS.FAILED]: 'failed',
+  [CHAT_MESSAGE_STATUS.REJECTED]: 'rejected by policy',
+});
 
 /**
  * Flatten persisted ChatMessage rows (oldest first) into the stateless
@@ -90,15 +258,22 @@ async function resolveProviderConfig() {
  * tool-call replay format to maintain (see Task 3).
  */
 function buildHistoryFromMessages(messages) {
-  return messages.map((m) => {
+  const history = [];
+  // The tool that produced the next COMMAND_RESULT row; results always follow
+  // their request row.
+  let lastRequestKind = KIND.COMMAND_REQUEST;
+  for (const m of messages) {
+    if (m.kind === KIND.REASONING) continue;
     if (m.kind === KIND.LOOKUP_REQUEST || m.kind === KIND.COMMAND_REQUEST) {
-      return { role: 'assistant', content: `[proposed] ${m.content}` };
+      lastRequestKind = m.kind;
+      history.push(toolCallNote(m.kind, m.content));
+    } else if (m.kind === KIND.COMMAND_RESULT) {
+      history.push(toolResultNote(lastRequestKind, m.content, STATUS_TO_OUTCOME[m.status]));
+    } else {
+      history.push({ role: m.role === ROLE.USER ? 'user' : 'assistant', content: m.content });
     }
-    if (m.kind === KIND.COMMAND_RESULT) {
-      return { role: 'user', content: `Result:\n${m.content}` };
-    }
-    return { role: m.role === ROLE.USER ? 'user' : 'assistant', content: m.content };
-  });
+  }
+  return history;
 }
 
 /**
@@ -137,6 +312,27 @@ async function writeAudit({ session, workspace, action, outcome, metadata }) {
       metadata,
     },
   });
+}
+
+/**
+ * Persist how full the model's context window was after this turn: the last
+ * call's input + output tokens, which is roughly what the next call will send.
+ * Returns the `{ tokens, window }` the Operator's UI shows, or null when the
+ * provider reported no usage.
+ */
+async function recordContextUsage(session, providerConfig, lastUsage) {
+  if (!lastUsage) return null;
+  const tokens = lastUsage.inputTokens + lastUsage.outputTokens;
+  const window = contextWindowFor(
+    providerConfig.providerName,
+    providerConfig.model,
+    providerConfig.config,
+  );
+  await prisma.chatSession.update({
+    where: { id: session.id },
+    data: { contextTokens: tokens, contextWindow: window },
+  });
+  return { tokens, window };
 }
 
 async function createMessage(createdMessages, data) {
@@ -211,6 +407,7 @@ async function runModelLoop({
   conversation,
   createdMessages,
   startedAt,
+  usage = {},
 }) {
   for (let turn = 0; turn < MAX_MODEL_TURNS_PER_MESSAGE; turn += 1) {
     if (Date.now() - startedAt >= MAX_ORCHESTRATION_WALL_CLOCK_MS) break;
@@ -219,7 +416,7 @@ async function runModelLoop({
     const newMessage = conversation[conversation.length - 1].content;
 
     const providerResult = await providerConfig.provider.sendMessage({
-      systemPrompt: persona.systemPrompt,
+      systemPrompt: `${persona.systemPrompt}\n\n${TOOL_CALL_RULES}`,
       history,
       newMessage,
       model: providerConfig.model,
@@ -227,6 +424,17 @@ async function runModelLoop({
       baseUrl: providerConfig.baseUrl,
       config: providerConfig.config,
     });
+    if (providerResult.usage) usage.last = providerResult.usage;
+
+    // Persisted first so it precedes whatever this call produced.
+    if (typeof providerResult.reasoning === 'string' && providerResult.reasoning.trim()) {
+      await createMessage(createdMessages, {
+        sessionId: session.id,
+        role: ROLE.ASSISTANT,
+        kind: KIND.REASONING,
+        content: providerResult.reasoning.trim(),
+      });
+    }
 
     // 1. Plain answer -- the model is done with this turn.
     if (providerResult.type === 'text') {
@@ -251,10 +459,26 @@ async function runModelLoop({
       await createAssistantText(createdMessages, session.id, providerResult.explanation);
     }
 
-    const commandText = commandTextFor(result, providerResult.command);
+    const isReadOnly =
+      result.verdict === POLICY_VERDICTS.ALLOW_LOOKUP ||
+      result.verdict === POLICY_VERDICTS.ALLOW_READONLY;
+    // A multi-region request is shown with its regions so the transcript and
+    // replayed history say what actually ran.
+    const requestedRegions = providerResult.regions;
+    const commandText = requestedRegions
+      ? withRegionsLabel(commandTextFor(result, providerResult.command), requestedRegions)
+      : commandTextFor(result, providerResult.command);
+    const rejectionReason =
+      result.verdict === POLICY_VERDICTS.REJECTED
+        ? result.reason
+        : requestedRegions && regionsProblem(requestedRegions, result.argv, isReadOnly);
 
-    // 2. Rejected by policy -- never executes.
-    if (result.verdict === POLICY_VERDICTS.REJECTED) {
+    // 2. Rejected by policy (or an invalid multi-region request) -- never
+    //    executes. The reason goes back to the model so it can find an allowed
+    //    way to get the same information, bounded like every other turn by
+    //    MAX_MODEL_TURNS_PER_MESSAGE.
+    if (rejectionReason) {
+      const reasonText = `I can't run that: ${rejectionReason}`;
       await createMessage(createdMessages, {
         sessionId: session.id,
         role: ROLE.ASSISTANT,
@@ -262,34 +486,85 @@ async function runModelLoop({
         content: commandText,
         status: CHAT_MESSAGE_STATUS.REJECTED,
       });
+      await createMessage(createdMessages, {
+        sessionId: session.id,
+        role: ROLE.ASSISTANT,
+        kind: KIND.COMMAND_RESULT,
+        content: reasonText,
+        status: CHAT_MESSAGE_STATUS.REJECTED,
+      });
       await writeAudit({
         session,
         workspace,
         action: AUDIT_ACTIONS.COMMAND_REJECTED,
         outcome: AUDIT_OUTCOMES.REJECTED,
-        metadata: { command: result.argv, reason: result.reason },
+        metadata: requestedRegions
+          ? { command: result.argv, reason: rejectionReason, regions: requestedRegions }
+          : { command: result.argv, reason: rejectionReason },
       });
-      await createAssistantText(createdMessages, session.id, `I can't run that: ${result.reason}`);
-      return;
+      conversation.push(toolCallNote(kind, commandText));
+      conversation.push(
+        toolResultNote(kind, reasonText, STATUS_TO_OUTCOME[CHAT_MESSAGE_STATUS.REJECTED]),
+      );
+      continue;
     }
 
-    // 3. Lookup or read-only -- safe to run without a human in the loop.
-    if (
-      result.verdict === POLICY_VERDICTS.ALLOW_LOOKUP ||
-      result.verdict === POLICY_VERDICTS.ALLOW_READONLY
-    ) {
-      const execution = await executeInSandbox(containerId, result.argv, {
+    // 3a. Read-only across several regions: one step, run in parallel.
+    if (isReadOnly && requestedRegions) {
+      const fanout = await runAcrossRegions(containerId, result.argv, requestedRegions, {
         env,
         timeoutSeconds: providerConfig.sandboxCommandTimeoutSeconds,
       });
-      const output = combineOutput(execution);
+      const status = fanout.outcome.startsWith('failed')
+        ? CHAT_MESSAGE_STATUS.FAILED
+        : CHAT_MESSAGE_STATUS.EXECUTED;
 
       await createMessage(createdMessages, {
         sessionId: session.id,
         role: ROLE.ASSISTANT,
         kind,
         content: commandText,
-        status: CHAT_MESSAGE_STATUS.EXECUTED,
+        status,
+      });
+      await createMessage(createdMessages, {
+        sessionId: session.id,
+        role: ROLE.ASSISTANT,
+        kind: KIND.COMMAND_RESULT,
+        content: fanout.output,
+        commandOutput: fanout.output,
+        status,
+      });
+
+      await writeAudit({
+        session,
+        workspace,
+        action: isLookup ? AUDIT_ACTIONS.LOOKUP_EXECUTED : AUDIT_ACTIONS.COMMAND_EXECUTED,
+        outcome: fanout.outcome === 'result' ? AUDIT_OUTCOMES.SUCCESS : AUDIT_OUTCOMES.FAILURE,
+        metadata: { command: result.argv, regions: fanout.regions, exitCodes: fanout.exitCodes },
+      });
+
+      conversation.push(toolCallNote(kind, commandText));
+      conversation.push(toolResultNote(kind, fanout.output, fanout.outcome));
+      continue;
+    }
+
+    // 3b. Lookup or read-only -- safe to run without a human in the loop.
+    if (isReadOnly) {
+      const execution = await executeInSandbox(containerId, result.argv, {
+        env,
+        timeoutSeconds: providerConfig.sandboxCommandTimeoutSeconds,
+      });
+      const output = combineOutput(execution);
+      const outcome = executionOutcome(execution);
+      const status =
+        outcome === 'result' ? CHAT_MESSAGE_STATUS.EXECUTED : CHAT_MESSAGE_STATUS.FAILED;
+
+      await createMessage(createdMessages, {
+        sessionId: session.id,
+        role: ROLE.ASSISTANT,
+        kind,
+        content: commandText,
+        status,
       });
       await createMessage(createdMessages, {
         sessionId: session.id,
@@ -297,7 +572,7 @@ async function runModelLoop({
         kind: KIND.COMMAND_RESULT,
         content: output,
         commandOutput: output,
-        status: CHAT_MESSAGE_STATUS.EXECUTED,
+        status,
       });
 
       await writeAudit({
@@ -312,8 +587,8 @@ async function runModelLoop({
         },
       });
 
-      conversation.push({ role: 'assistant', content: `[proposed] ${commandText}` });
-      conversation.push({ role: 'user', content: `Result:\n${output}` });
+      conversation.push(toolCallNote(kind, commandText));
+      conversation.push(toolResultNote(kind, output, outcome));
       continue;
     }
 
@@ -442,6 +717,7 @@ async function handleUserMessage({ session, workspace, credential, userId, text 
   const priorHistory = await loadPriorHistory(session.id, [userMessage.id]);
   const conversation = [...priorHistory, { role: 'user', content: text }];
 
+  const usage = {};
   await runModelLoop({
     session,
     persona,
@@ -452,9 +728,11 @@ async function handleUserMessage({ session, workspace, credential, userId, text 
     conversation,
     createdMessages,
     startedAt,
+    usage,
   });
 
-  return { messages: createdMessages };
+  const context = await recordContextUsage(session, providerConfig, usage.last);
+  return { messages: createdMessages, context };
 }
 
 /**
@@ -651,10 +929,11 @@ async function confirmCommand({ session, workspace, credential, messageId, userI
   const priorHistory = await loadPriorHistory(session.id, [messageId, resultRow.id]);
   const conversation = [
     ...priorHistory,
-    { role: 'assistant', content: `[proposed] ${commandTextFor(result, message.content)}` },
-    { role: 'user', content: `Result:\n${output}` },
+    toolCallNote(message.kind, commandTextFor(result, message.content)),
+    toolResultNote(message.kind, output, executionOutcome(execution)),
   ];
 
+  const usage = {};
   await runModelLoop({
     session,
     persona,
@@ -665,9 +944,11 @@ async function confirmCommand({ session, workspace, credential, messageId, userI
     conversation,
     createdMessages,
     startedAt,
+    usage,
   });
 
-  return { messages: createdMessages };
+  const context = await recordContextUsage(session, providerConfig, usage.last);
+  return { messages: createdMessages, context };
 }
 
 /**

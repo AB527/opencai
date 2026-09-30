@@ -105,6 +105,41 @@ test('top-level --help is a lookup and reports argv[1] as the verb', () => {
   assert.equal(result.verb, '--help');
 });
 
+// --- help (AWS CLI v2's documentation form) ---------------------------------
+
+test('`help` after the binary, a service or an operation is a lookup', () => {
+  for (const cmd of ['aws help', 'aws ec2 help', 'aws ec2 describe-instances help']) {
+    const result = run(cmd);
+    assert.equal(result.verdict, POLICY_VERDICTS.ALLOW_LOOKUP, cmd);
+    assert.equal(result.reason, null, cmd);
+    assert.equal(result.dryRunCapable, false, cmd);
+  }
+});
+
+test('`help` on a mutating operation is a lookup, not a confirmation', () => {
+  const result = run('aws s3 rb help');
+  assert.equal(result.verdict, POLICY_VERDICTS.ALLOW_LOOKUP);
+  assert.deepEqual(result.argv, ['aws', 's3', 'rb', 'help']);
+});
+
+test('`help` anywhere other than those exact shapes is an ordinary argument', () => {
+  // Each of these acts on a resource, so none may run as a lookup.
+  for (const cmd of [
+    'aws s3 rm s3://bucket/help',
+    'aws s3 rm s3://bucket/key help',
+    'aws ec2 terminate-instances --instance-ids i-1 help',
+  ]) {
+    assert.notEqual(run(cmd).verdict, POLICY_VERDICTS.ALLOW_LOOKUP, cmd);
+  }
+  const trailing = run('aws ec2 terminate-instances --instance-ids i-1 help');
+  assert.equal(trailing.verdict, POLICY_VERDICTS.REQUIRE_CONFIRMATION);
+});
+
+test('`help` does not bypass the binary allowlist', () => {
+  const result = run('bash help');
+  assert.equal(result.verdict, POLICY_VERDICTS.REJECTED);
+});
+
 test('--help does not bypass the binary allowlist', () => {
   const result = run('curl --help');
   assert.equal(result.verdict, POLICY_VERDICTS.REJECTED);

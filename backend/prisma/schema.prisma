@@ -43,6 +43,7 @@ enum ChatMessageKind {
   LOOKUP_REQUEST
   COMMAND_REQUEST
   COMMAND_RESULT
+  REASONING
 }
 
 enum AiProvider {
@@ -168,12 +169,18 @@ model ChatSession {
   workspaceId          String
   mode                 ChatMode
   subMode              FinOpsSubMode?
+  // Set from the first user message; the Operator can rename it.
+  title                String?
   sandboxContainerId   String?
   sandboxStatus        String?
   sandboxCreatedAt     DateTime?
   sandboxExpiresAt     DateTime?
   mutatingCommandCap   Int            @default(10)
   mutatingCommandCount Int            @default(0)
+  // Tokens in the most recent model call (input + output) and the model's
+  // context window at that time; shown as a usage ring in the chat header.
+  contextTokens        Int?
+  contextWindow        Int?
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
 

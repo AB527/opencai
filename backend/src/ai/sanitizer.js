@@ -29,6 +29,12 @@ function sanitizeOutput(text) {
   // Coerce, never pass through: failing open here would leak whole secrets.
   let result = typeof text === 'string' ? text : String(text);
 
+  // 0. Terminal escape sequences (e.g. the bold headings in `aws ... help`).
+  //    Stripped first so they cannot split a secret and hide it from the
+  //    rules below.
+  // eslint-disable-next-line no-control-regex
+  result = result.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+
   // 1. AWS access key IDs (long-lived AKIA..., temporary ASIA...).
   result = result.replace(/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, REDACTED);
 
