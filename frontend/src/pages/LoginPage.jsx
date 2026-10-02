@@ -5,6 +5,7 @@ import loginLogo from '../assets/opencai-login-logo.png';
 import { useAuth } from '../lib/AuthContext';
 import { login } from '../lib/authApi';
 import { useBranding } from '../lib/useBranding';
+import { useInstallPrompt } from '../lib/useInstallPrompt';
 import { SparkleIcon } from '../components/icons';
 
 export function LoginPage() {
@@ -18,6 +19,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const { canInstall, install } = useInstallPrompt();
 
   if (token) {
     return <Navigate to="/dashboard" replace />;
@@ -71,9 +73,7 @@ export function LoginPage() {
             </div>
           </div>
 
-          <h1 className="mt-6 text-3xl font-bold text-gray-900 dark:text-gray-50">
-            Welcome back
-          </h1>
+          <h1 className="mt-6 text-3xl font-bold text-gray-900 dark:text-gray-50">Welcome back</h1>
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
             Sign in with your Administrator or Operator credentials to continue.
           </p>
@@ -134,6 +134,19 @@ export function LoginPage() {
               {submitting ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
+
+          {canInstall && (
+            <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
+              Use OpenCAI as an app?{' '}
+              <button
+                type="button"
+                onClick={install}
+                className="font-medium text-teal-700 hover:underline dark:text-teal-400"
+              >
+                Install app
+              </button>
+            </p>
+          )}
         </div>
       </div>
     </div>
