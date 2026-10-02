@@ -1,8 +1,7 @@
 const OpenAI = require('openai');
 const { REGIONS_PROPERTY, parseRegions } = require('./regionsParam');
 
-const DEFAULT_MAX_TOKENS = 4096;
-const DEFAULT_TEMPERATURE = 0.2;
+const { DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE } = require('../settingsDefaults');
 
 const MALFORMED_FALLBACK_TEXT = "(The model's response could not be parsed.)";
 
@@ -142,6 +141,9 @@ async function sendMessage({ systemPrompt, history, newMessage, model, apiKey, b
     tool_choice: 'auto',
     max_tokens: config?.max_tokens ?? DEFAULT_MAX_TOKENS,
     temperature: config?.temperature ?? DEFAULT_TEMPERATURE,
+    // Model-specific options for OpenAI-compatible servers such as NVIDIA's
+    // (e.g. { "thinking": true }); sent only when configured.
+    ...(config?.chat_template_kwargs && { chat_template_kwargs: config.chat_template_kwargs }),
   });
 
   const parsed = parseResponse(response);

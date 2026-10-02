@@ -31,6 +31,7 @@ const { sanitizeOutput } = require('./sanitizer');
 const { credentialToEnv } = require('./credentials');
 const { provisionSandbox, executeInSandbox } = require('./sandbox/sandboxManager');
 const { contextWindowFor } = require('./contextWindows');
+const { DEFAULT_REQUEST_LIMITS } = require('./settingsDefaults');
 
 // How many prior ChatMessage rows are replayed into the model's context.
 // Deliberately local: nothing outside this orchestrator has an opinion on it.
@@ -65,11 +66,13 @@ const TOOL_CALL_RULES = [
   'When a command fails, read the error and fix it yourself before involving the Operator. If you are unsure of the correct syntax or parameters, look them up with run_lookup and "aws <service> <operation> help" (this AWS CLI does not accept --help), then retry with a corrected command.',
   'When a command is rejected by policy, it was not run; do not repeat it. Use a different, allowed command to get the same information.',
   'To run the same read-only command in several AWS regions, call the tool once with the "regions" argument (a list of region names, or ["all"] for every enabled region) instead of making one call per region. Leave --region out of that command.',
+  'Global services — Cost Explorer (ce), IAM, Organizations, Route 53, and listing S3 buckets — return the same data in every region. Run them once, without "regions" (use --region us-east-1 for Cost Explorer).',
+  'Help pages are long and only partly shown to you. Prefer commands you already know; look up help only for the options you need.',
   'Ask the Operator only for information you cannot discover with a command, such as which AWS region they mean when none is configured.',
   "Once you have the information you need, answer the Operator's question directly in plain language.",
 ].join('\n');
 
-// Longest command output passed back to the model in one result note.
+// Hard upper bound on any one result note, wherever it is built.
 const MAX_MODEL_OUTPUT_CHARS = 12000;
 
 const SANDBOX_UNAVAILABLE_TEXT = "The execution environment couldn't be started. Please try again.";
@@ -104,7 +107,79 @@ async function resolveProviderConfig() {
     config: settings.config || undefined,
     sandboxCommandTimeoutSeconds: settings.sandboxCommandTimeoutSeconds,
     sandboxIdleTimeoutMinutes: settings.sandboxIdleTimeoutMinutes,
+    limits: requestLimits(settings.config),
   };
+}
+
+function requestLimits(config) {
+  const positive = (value, fallback) => {
+    const n = Number(value);
+    return Number.isInteger(n) && n > 0 ? n : fallback;
+  };
+  return {
+    ...DEFAULT_REQUEST_LIMITS,
+    toolOutputChars: positive(config?.tool_output_chars, DEFAULT_REQUEST_LIMITS.toolOutputChars),
+    historyChars: positive(config?.history_chars, DEFAULT_REQUEST_LIMITS.historyChars),
+  };
+}
+
+const isToolResultNote = (entry) =>
+  entry.role === 'user' && /^\((run_lookup|run_command) /.test(entry.content);
+
+function truncateText(text, max) {
+  return text.length > max
+    ? `${text.slice(0, max)}\n[... ${text.length - max} more characters not shown]`
+    : text;
+}
+
+/**
+ * Shape the conversation into one request that fits `limits`: the newest
+ * output capped at toolOutputChars, older outputs shrunk to olderResultChars,
+ * then the oldest turns dropped until the history fits historyChars. Nothing
+ * persisted changes -- this is only what the model is sent.
+ */
+function fitConversation(conversation, limits) {
+  const last = conversation[conversation.length - 1];
+  const newMessage = isToolResultNote(last)
+    ? truncateText(last.content, limits.toolOutputChars)
+    : last.content;
+
+  let history = conversation
+    .slice(0, -1)
+    .map((e) =>
+      isToolResultNote(e) ? { ...e, content: truncateText(e.content, limits.olderResultChars) } : e,
+    );
+  let total = history.reduce((sum, e) => sum + e.content.length, 0);
+  let trimmed = false;
+  while (history.length > 0 && total > limits.historyChars) {
+    total -= history[0].content.length;
+    history = history.slice(1);
+    trimmed = true;
+  }
+  // Providers such as Anthropic require the conversation to open with a user
+  // turn; trimming must not leave an assistant turn at the front.
+  while (trimmed && history.length > 0 && history[0].role !== 'user') history = history.slice(1);
+  return { history, newMessage };
+}
+
+/**
+ * Turn the provider SDK's HTTP errors into messages the Operator can act on;
+ * anything else is rethrown untouched (and becomes the generic 500).
+ */
+function providerError(err) {
+  const status = err?.status;
+  const detail = String(err?.error?.error?.message ?? err?.message ?? '');
+  let mapped = null;
+  if (status === 413 || /request too large|maximum context|context length/i.test(detail)) {
+    mapped = new AppError(413, ERROR_CODES.AI_PROVIDER_REQUEST_TOO_LARGE);
+  } else if (status === 429) {
+    mapped = new AppError(429, ERROR_CODES.AI_PROVIDER_RATE_LIMITED);
+  } else if (status === 401 || status === 403) {
+    mapped = new AppError(502, ERROR_CODES.AI_PROVIDER_AUTH_FAILED);
+  }
+  if (!mapped) return err;
+  console.error(`[orchestrator] AI provider error ${status}: ${detail.slice(0, 300)}`);
+  return mapped;
 }
 
 function toolCallNote(kind, commandText) {
@@ -412,18 +487,25 @@ async function runModelLoop({
   for (let turn = 0; turn < MAX_MODEL_TURNS_PER_MESSAGE; turn += 1) {
     if (Date.now() - startedAt >= MAX_ORCHESTRATION_WALL_CLOCK_MS) break;
 
-    const history = conversation.slice(0, -1);
-    const newMessage = conversation[conversation.length - 1].content;
+    const { history, newMessage } = fitConversation(
+      conversation,
+      providerConfig.limits ?? DEFAULT_REQUEST_LIMITS,
+    );
 
-    const providerResult = await providerConfig.provider.sendMessage({
-      systemPrompt: `${persona.systemPrompt}\n\n${TOOL_CALL_RULES}`,
-      history,
-      newMessage,
-      model: providerConfig.model,
-      apiKey: providerConfig.apiKey,
-      baseUrl: providerConfig.baseUrl,
-      config: providerConfig.config,
-    });
+    let providerResult;
+    try {
+      providerResult = await providerConfig.provider.sendMessage({
+        systemPrompt: `${persona.systemPrompt}\n\n${TOOL_CALL_RULES}`,
+        history,
+        newMessage,
+        model: providerConfig.model,
+        apiKey: providerConfig.apiKey,
+        baseUrl: providerConfig.baseUrl,
+        config: providerConfig.config,
+      });
+    } catch (err) {
+      throw providerError(err);
+    }
     if (providerResult.usage) usage.last = providerResult.usage;
 
     // Persisted first so it precedes whatever this call produced.

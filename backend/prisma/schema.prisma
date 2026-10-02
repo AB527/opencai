@@ -51,6 +51,7 @@ enum AiProvider {
   OPENAI
   GEMINI
   GROQ
+  NVIDIA
 }
 
 model User {

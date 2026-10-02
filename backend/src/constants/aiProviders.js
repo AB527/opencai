@@ -4,6 +4,7 @@ const AI_PROVIDERS = Object.freeze({
   OPENAI: 'OPENAI',
   GEMINI: 'GEMINI',
   GROQ: 'GROQ',
+  NVIDIA: 'NVIDIA',
 });
 
 module.exports = { AI_PROVIDERS };

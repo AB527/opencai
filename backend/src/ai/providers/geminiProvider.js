@@ -1,8 +1,7 @@
 const { GoogleGenAI } = require('@google/genai');
 const { REGIONS_PROPERTY, parseRegions } = require('./regionsParam');
 
-const DEFAULT_MAX_TOKENS = 4096;
-const DEFAULT_TEMPERATURE = 0.2;
+const { DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE } = require('../settingsDefaults');
 
 const MALFORMED_FALLBACK_TEXT = "(The model's response could not be parsed.)";
 

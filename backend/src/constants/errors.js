@@ -25,6 +25,11 @@ const ERROR_CODES = Object.freeze({
   // Thrown with HTTP 422 when the session's Workspace has no
   // WorkspaceCredential configured yet -- nothing to inject into the sandbox.
   WORKSPACE_CREDENTIAL_MISSING: 'WORKSPACE_CREDENTIAL_MISSING',
+  // Mapped by the orchestrator from the AI provider's own HTTP errors, so the
+  // Operator sees what went wrong instead of a generic 500.
+  AI_PROVIDER_REQUEST_TOO_LARGE: 'AI_PROVIDER_REQUEST_TOO_LARGE',
+  AI_PROVIDER_RATE_LIMITED: 'AI_PROVIDER_RATE_LIMITED',
+  AI_PROVIDER_AUTH_FAILED: 'AI_PROVIDER_AUTH_FAILED',
 });
 
 const ERROR_MESSAGES = Object.freeze({
@@ -46,6 +51,12 @@ const ERROR_MESSAGES = Object.freeze({
     'This session already has a command awaiting confirmation. Resolve it before sending another message.',
   [ERROR_CODES.WORKSPACE_CREDENTIAL_MISSING]:
     'This Workspace has no cloud credentials configured yet. An administrator needs to add them before chat can run commands.',
+  [ERROR_CODES.AI_PROVIDER_REQUEST_TOO_LARGE]:
+    "This conversation is too large for the AI provider's limits. Start a new session, or raise the limits in Manage Chat Settings.",
+  [ERROR_CODES.AI_PROVIDER_RATE_LIMITED]:
+    'The AI provider is rate-limiting requests right now. Wait a moment and try again.',
+  [ERROR_CODES.AI_PROVIDER_AUTH_FAILED]:
+    'The AI provider rejected the API key. An administrator needs to check it in Manage Chat Settings.',
 });
 
 module.exports = { ERROR_CODES, ERROR_MESSAGES };

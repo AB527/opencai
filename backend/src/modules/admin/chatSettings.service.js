@@ -1,10 +1,17 @@
 const prisma = require('../../config/db');
 const envelope = require('../../crypto/envelope');
+const { defaultConfig } = require('../../ai/settingsDefaults');
 
 function toPublicShape(row) {
   if (!row) return null;
   const { providerApiKeyEncrypted, ...rest } = row;
-  return { ...rest, hasApiKey: Boolean(providerApiKeyEncrypted) };
+  // defaults: what each config setting resolves to when left unset, for the
+  // stored provider and model -- shown in Manage Chat Settings.
+  return {
+    ...rest,
+    hasApiKey: Boolean(providerApiKeyEncrypted),
+    defaults: defaultConfig(rest.provider, rest.model),
+  };
 }
 
 async function getChatSettings() {

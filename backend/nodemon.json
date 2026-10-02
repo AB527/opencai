@@ -2,5 +2,6 @@
   "watch": ["src", ".env"],
   "ext": "js,json",
   "ignore": ["node_modules"],
-  "exec": "node src/server.js"
+  "exec": "node src/server.js",
+  "delay": 1000
 }

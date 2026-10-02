@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
+import { useToast } from '../../lib/ToastContext';
 import { useWorkspace } from '../../lib/WorkspaceContext';
 import {
   createChatSession,
@@ -35,6 +36,7 @@ function mergeMessages(existing, incoming) {
 
 export function OperatorPage() {
   const { token } = useAuth();
+  const toast = useToast();
   const { workspace, setWorkspace } = useWorkspace();
   const [cloudOrOnPrem, setCloudOrOnPrem] = useState('cloud');
   const [editingWorkspace, setEditingWorkspace] = useState(false);
@@ -75,7 +77,6 @@ export function OperatorPage() {
   // URL; opening, starting or leaving a chat in the page writes it back.
   const [searchParams, setSearchParams] = useSearchParams();
   const openSessionId = searchParams.get('session');
-  const [openError, setOpenError] = useState('');
   // The session id being loaded from the URL. While set, the state -> URL sync
   // below must not overwrite the URL with the (not yet loaded) current chat.
   const loadingSessionIdRef = useRef(null);
@@ -93,7 +94,6 @@ export function OperatorPage() {
 
     let cancelled = false;
     loadingSessionIdRef.current = openSessionId;
-    setOpenError('');
     getChatSession(token, openSessionId)
       .then(({ messages, ...session }) => {
         if (cancelled) return;
@@ -110,7 +110,7 @@ export function OperatorPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setOpenError(err.message || 'Could not open that chat.');
+        toast.error(err.message || 'Could not open that chat.');
         // Point the URL back at whatever chat is still open.
         setSearchParams(currentSession ? { session: currentSession.id } : {}, { replace: true });
       })
@@ -158,6 +158,14 @@ export function OperatorPage() {
     setSessionsByKey((prev) => ({ ...prev, [sessionKey]: undefined }));
   }
 
+  // After a failed request the server may still have saved rows (the user's
+  // message, steps before the failure); reload so the transcript matches it.
+  function resyncMessages(sessionId) {
+    getChatSession(token, sessionId)
+      .then(({ messages }) => setMessagesBySession((prev) => ({ ...prev, [sessionId]: messages })))
+      .catch(() => {});
+  }
+
   async function handleSend(text) {
     if (!workspace || !sessionKey || sending) return;
     if (activeMode === 'FINOPS' && !financeSubMode) return;
@@ -175,7 +183,8 @@ export function OperatorPage() {
         });
       } catch (err) {
         setSending(false);
-        throw err;
+        toast.error(err.message || 'Could not start a new chat.');
+        return;
       }
       setSessionsByKey((prev) => ({ ...prev, [key]: session }));
     }
@@ -209,7 +218,8 @@ export function OperatorPage() {
         ...prev,
         [sessionId]: withoutOptimistic(prev[sessionId]),
       }));
-      throw err;
+      toast.error(err.message || 'The message could not be sent.');
+      resyncMessages(sessionId);
     } finally {
       setSending(false);
     }
@@ -225,6 +235,9 @@ export function OperatorPage() {
         ...prev,
         [currentSession.id]: mergeMessages(prev[currentSession.id] || [], res.messages),
       }));
+    } catch (err) {
+      toast.error(err.message || 'The command could not be confirmed.');
+      resyncMessages(currentSession.id);
     } finally {
       setSending(false);
     }
@@ -239,6 +252,9 @@ export function OperatorPage() {
         ...prev,
         [currentSession.id]: mergeMessages(prev[currentSession.id] || [], res.messages),
       }));
+    } catch (err) {
+      toast.error(err.message || 'The command could not be cancelled.');
+      resyncMessages(currentSession.id);
     } finally {
       setSending(false);
     }
@@ -283,9 +299,6 @@ export function OperatorPage() {
             </div>
           ) : (
             <>
-              {openError && (
-                <p className="mx-auto mb-4 w-full max-w-4xl text-sm text-red-600">{openError}</p>
-              )}
               {currentSession && (
                 <div className="mx-auto mb-6 w-full max-w-4xl">
                   <ChatSessionHeader session={currentSession} onNewSession={handleNewSession} />

@@ -168,7 +168,9 @@ const fakeProviderModule = {
       // extra call shows up as both a surplus call and a recognisable message.
       return { type: 'text', content: '__UNEXPECTED_EXTRA_PROVIDER_CALL__' };
     }
-    return S.providerResponses.shift();
+    const next = S.providerResponses.shift();
+    if (next instanceof Error) throw next;
+    return next;
   },
 };
 
@@ -609,8 +611,146 @@ test('large output is capped in what the model sees but persisted in full', asyn
   assert.equal(messages[2].content, big);
   const seen = S.providerCalls[1].newMessage;
   assert.ok(seen.startsWith('(run_lookup result)\nxxx'));
-  assert.ok(seen.endsWith('\n[... 4 more characters not shown]'));
+  // The newest output is capped at the default 6,000 characters.
+  assert.match(seen, /\n\[\.\.\. \d+ more characters not shown\]$/);
+  assert.ok(seen.length < 6100);
   assert.equal(seen.includes('TAIL'), false);
+});
+
+/* ---- Request budget and provider errors ----------------------------------- */
+
+test('older outputs shrink and the oldest turns are dropped to fit the history budget', async () => {
+  reset();
+  const session = makeSession();
+  // Prior history: three big command results, as replayed from the database.
+  const big = (tag) => `${tag}:${'y'.repeat(9000)}`;
+  for (const [i, tag] of ['one', 'two', 'three'].entries()) {
+    S.messages.push(
+      {
+        id: `u${i}`,
+        sessionId: 'sess-1',
+        role: 'USER',
+        kind: 'TEXT',
+        content: `question ${tag}`,
+        commandOutput: null,
+        status: null,
+        createdAt: nextDate(),
+      },
+      {
+        id: `c${i}`,
+        sessionId: 'sess-1',
+        role: 'ASSISTANT',
+        kind: 'COMMAND_REQUEST',
+        content: `aws ec2 describe-${tag}`,
+        commandOutput: null,
+        status: 'EXECUTED',
+        createdAt: nextDate(),
+      },
+      {
+        id: `r${i}`,
+        sessionId: 'sess-1',
+        role: 'ASSISTANT',
+        kind: 'COMMAND_RESULT',
+        content: big(tag),
+        commandOutput: big(tag),
+        status: 'EXECUTED',
+        createdAt: nextDate(),
+      },
+    );
+  }
+  S.providerResponses = [{ type: 'text', content: 'ok' }];
+
+  await handleUserMessage({
+    session,
+    workspace: WORKSPACE,
+    credential: CREDENTIAL,
+    userId: 'user-1',
+    text: 'and now?',
+  });
+
+  const { history, newMessage } = S.providerCalls[0];
+  assert.equal(newMessage, 'and now?');
+  const total = history.reduce((sum, h) => sum + h.content.length, 0);
+  assert.ok(total <= 9000, `history is ${total} chars`);
+  // Every replayed output was shrunk; none carries its full 9,000 characters.
+  for (const h of history.filter((h) => h.content.startsWith('(run_command'))) {
+    assert.ok(h.content.length < 1600, `${h.content.length}`);
+  }
+  // Trimming starts from the oldest turn and never leaves an assistant turn first.
+  assert.equal(history[0].role, 'user');
+  assert.ok(history.at(-1).content.startsWith('(run_command result)\nthree:'));
+});
+
+test('ChatSettings.config can raise the request limits', async () => {
+  reset();
+  S.settings.config = { tool_output_chars: 20000, history_chars: 50000 };
+  const session = makeSession();
+  const big = 'z'.repeat(15000);
+  S.providerResponses = [
+    { type: 'lookup_request', content: 'aws ec2 help', command: 'aws ec2 help' },
+    { type: 'text', content: 'ok' },
+  ];
+  S.classifyResults = [
+    verdict({ verdict: POLICY_VERDICTS.ALLOW_LOOKUP, argv: ['aws', 'ec2', 'help'] }),
+  ];
+  S.execResults = [{ stdout: big, stderr: '', exitCode: 0, timedOut: false }];
+
+  await handleUserMessage({
+    session,
+    workspace: WORKSPACE,
+    credential: CREDENTIAL,
+    userId: 'user-1',
+    text: 'docs',
+  });
+
+  // Raised past the default 6,000, up to the hard 12,000 per-note bound.
+  const seen = S.providerCalls[1].newMessage;
+  assert.ok(seen.length > 12000 && seen.length < 12100, `${seen.length}`);
+});
+
+test('provider HTTP errors become clear AppErrors; other errors pass through', async () => {
+  const cases = [
+    [
+      { status: 413, error: { error: { message: 'Request too large for model' } } },
+      413,
+      ERROR_CODES.AI_PROVIDER_REQUEST_TOO_LARGE,
+    ],
+    [{ status: 429 }, 429, ERROR_CODES.AI_PROVIDER_RATE_LIMITED],
+    [{ status: 401 }, 502, ERROR_CODES.AI_PROVIDER_AUTH_FAILED],
+  ];
+  const quiet = console.error;
+  console.error = () => {};
+  try {
+    for (const [providerErr, status, code] of cases) {
+      reset();
+      S.providerResponses = [Object.assign(new Error('provider failed'), providerErr)];
+      await assert.rejects(
+        handleUserMessage({
+          session: makeSession(),
+          workspace: WORKSPACE,
+          credential: CREDENTIAL,
+          userId: 'user-1',
+          text: 'hi',
+        }),
+        (err) => err.status === status && err.code === code,
+      );
+    }
+    reset();
+    const other = new Error('socket hang up');
+    S.providerResponses = [other];
+    await assert.rejects(
+      handleUserMessage({
+        session: makeSession(),
+        workspace: WORKSPACE,
+        credential: CREDENTIAL,
+        userId: 'user-1',
+        text: 'hi',
+      }),
+      (err) => err === other,
+    );
+  } finally {
+    console.error = quiet;
+  }
 });
 
 test('read-only command executes immediately as a COMMAND_REQUEST/COMMAND_RESULT pair', async () => {
