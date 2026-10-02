@@ -18,6 +18,7 @@ async function getInstanceBranding() {
     displayName: branding?.displayName || 'OpenCAI',
     logoObjectKey: branding?.logoObjectKey || null,
     loginImageObjectKey: branding?.loginImageObjectKey || null,
+    faviconObjectKey: branding?.faviconObjectKey || null,
   };
 }
 

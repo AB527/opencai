@@ -33,6 +33,7 @@ const SESSION_SELECT = {
 async function createSession(userId, { workspaceId, mode, subMode }) {
   const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } });
   if (!workspace) throw new AppError(404, ERROR_CODES.NOT_FOUND);
+  if (!workspace.isActive) throw new AppError(403, ERROR_CODES.WORKSPACE_INACTIVE);
 
   const access = await prisma.userOrganisation.findUnique({
     where: { userId_organisationId: { userId, organisationId: workspace.organisationId } },
@@ -101,6 +102,7 @@ async function loadSessionWithCredential(userId, sessionId) {
     include: { workspace: { include: { credential: true } } },
   });
   if (!session) throw new AppError(404, ERROR_CODES.NOT_FOUND);
+  if (!session.workspace.isActive) throw new AppError(403, ERROR_CODES.WORKSPACE_INACTIVE);
   if (!session.workspace.credential) {
     throw new AppError(422, ERROR_CODES.WORKSPACE_CREDENTIAL_MISSING);
   }

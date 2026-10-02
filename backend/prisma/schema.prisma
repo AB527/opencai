@@ -94,6 +94,7 @@ model InstanceBranding {
   displayName         String
   logoObjectKey       String?
   loginImageObjectKey String?
+  faviconObjectKey    String?
   updatedAt           DateTime @updatedAt
 
   @@map("instance_branding")
@@ -121,6 +122,8 @@ model Workspace {
   csp            CloudServiceProvider
   account        String
   environment    String
+  // A deactivated Workspace is hidden from Operators and cannot run chats.
+  isActive       Boolean              @default(true)
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 

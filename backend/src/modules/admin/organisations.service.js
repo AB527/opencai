@@ -9,6 +9,7 @@ const WORKSPACE_SELECT = {
   csp: true,
   account: true,
   environment: true,
+  isActive: true,
   createdAt: true,
   credential: { select: { id: true, updatedAt: true } },
 };

@@ -18,6 +18,7 @@ const createWorkspaceSchema = z.object({
 const updateWorkspaceSchema = z.object({
   account: z.string().min(1).max(200).optional(),
   environment: z.string().min(1).max(100).optional(),
+  isActive: z.boolean().optional(),
 });
 
 // AWS-only for now -- generalize this (e.g. a discriminated union on csp) once

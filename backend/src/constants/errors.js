@@ -30,6 +30,15 @@ const ERROR_CODES = Object.freeze({
   AI_PROVIDER_REQUEST_TOO_LARGE: 'AI_PROVIDER_REQUEST_TOO_LARGE',
   AI_PROVIDER_RATE_LIMITED: 'AI_PROVIDER_RATE_LIMITED',
   AI_PROVIDER_AUTH_FAILED: 'AI_PROVIDER_AUTH_FAILED',
+  // Thrown with HTTP 409 when deleting a Workspace that still has chat
+  // sessions -- they (and their history) must not be lost silently.
+  WORKSPACE_HAS_CHATS: 'WORKSPACE_HAS_CHATS',
+  // Thrown with HTTP 409 when deleting an Operator who has chat sessions --
+  // deactivating keeps their history instead.
+  OPERATOR_HAS_CHATS: 'OPERATOR_HAS_CHATS',
+  // Thrown with HTTP 403 when an Operator starts or continues a chat in a
+  // Workspace an Administrator has deactivated.
+  WORKSPACE_INACTIVE: 'WORKSPACE_INACTIVE',
 });
 
 const ERROR_MESSAGES = Object.freeze({
@@ -57,6 +66,10 @@ const ERROR_MESSAGES = Object.freeze({
     'The AI provider is rate-limiting requests right now. Wait a moment and try again.',
   [ERROR_CODES.AI_PROVIDER_AUTH_FAILED]:
     'The AI provider rejected the API key. An administrator needs to check it in Manage Chat Settings.',
+  [ERROR_CODES.WORKSPACE_HAS_CHATS]: 'This Workspace has chat sessions and cannot be deleted.',
+  [ERROR_CODES.OPERATOR_HAS_CHATS]:
+    'This operator has chat sessions and cannot be deleted. Deactivate them instead.',
+  [ERROR_CODES.WORKSPACE_INACTIVE]: 'This Workspace has been deactivated by an administrator.',
 });
 
 module.exports = { ERROR_CODES, ERROR_MESSAGES };

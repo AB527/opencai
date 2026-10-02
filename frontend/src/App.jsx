@@ -3,6 +3,7 @@ import { AuthProvider } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeContext';
 import { WorkspaceProvider } from './lib/WorkspaceContext';
 import { ToastProvider } from './lib/ToastContext';
+import { BrandingFavicon } from './lib/useBranding';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
 import { MfaVerifyPage } from './pages/MfaVerifyPage';
@@ -30,6 +31,7 @@ function OperatorRoute({ children }) {
 function App() {
   return (
     <ThemeProvider>
+      <BrandingFavicon />
       <ToastProvider>
         <AuthProvider>
           <WorkspaceProvider>

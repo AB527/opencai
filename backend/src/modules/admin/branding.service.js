@@ -6,7 +6,7 @@ function extensionFor(file) {
   return parts.length > 1 ? `.${parts.pop()}` : '';
 }
 
-async function updateBranding({ displayName, logoFile, loginImageFile }) {
+async function updateBranding({ displayName, logoFile, loginImageFile, faviconFile }) {
   const existing = await prisma.instanceBranding.findFirst();
 
   const data = {};
@@ -23,6 +23,13 @@ async function updateBranding({ displayName, logoFile, loginImageFile }) {
       `branding/login-image-${Date.now()}${extensionFor(loginImageFile)}`,
       loginImageFile.buffer,
       loginImageFile.mimetype,
+    );
+  }
+  if (faviconFile) {
+    data.faviconObjectKey = await uploadFile(
+      `branding/favicon-${Date.now()}${extensionFor(faviconFile)}`,
+      faviconFile.buffer,
+      faviconFile.mimetype,
     );
   }
 

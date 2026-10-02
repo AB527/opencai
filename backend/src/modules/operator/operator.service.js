@@ -20,7 +20,8 @@ async function listOrganisationWorkspaces(userId, organisationId) {
   }
 
   return prisma.workspace.findMany({
-    where: { organisationId },
+    // Deactivated Workspaces are hidden from Operators.
+    where: { organisationId, isActive: true },
     select: { id: true, csp: true, account: true, environment: true },
     orderBy: [{ environment: 'asc' }, { csp: 'asc' }, { account: 'asc' }],
   });

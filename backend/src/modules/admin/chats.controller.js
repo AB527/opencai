@@ -19,4 +19,13 @@ async function messages(req, res, next) {
   }
 }
 
-module.exports = { list, messages };
+async function remove(req, res, next) {
+  try {
+    await service.deleteChatSession(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { list, messages, remove };

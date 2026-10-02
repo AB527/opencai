@@ -1,25 +1,33 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../lib/AuthContext';
 import { getChatSettings, updateChatSettings } from '../../lib/adminApi';
+import { useToast } from '../../lib/ToastContext';
 import { AdminLayout } from './AdminLayout';
 
-// Settings the backend understands, offered as ready-made rows and filled with
-// their defaults (sent by the backend for the stored provider and model). A row
-// still at its default is not saved, so defaults keep following the model --
-// e.g. context_window when the model changes. Only changed values are saved.
+// Settings the backend understands, offered as ready-made rows. `prefill` rows
+// start filled with their defaults (sent by the backend for the stored provider
+// and model); the others start empty and show their default as a placeholder.
+// A row still at its default, or empty, is not saved, so defaults keep
+// following the model -- e.g. context_window when the model changes.
 const KNOWN_SETTINGS = [
   { key: 'temperature', hint: 'Randomness of replies, 0–1.' },
-  { key: 'max_tokens', hint: 'Longest reply the model may write, in tokens.' },
+  { key: 'max_tokens', hint: 'Longest reply the model may write, in tokens.', prefill: true },
   {
     key: 'context_window',
     hint: 'The model’s context size in tokens, for the usage ring.',
     unknown: 'unknown for this model — set it',
+    prefill: true,
   },
   {
     key: 'history_chars',
     hint: 'Characters of earlier conversation sent with each request. Raise on larger plans.',
+    prefill: true,
   },
-  { key: 'tool_output_chars', hint: 'Characters of the newest command output sent to the model.' },
+  {
+    key: 'tool_output_chars',
+    hint: 'Characters of the newest command output sent to the model.',
+    prefill: true,
+  },
   {
     key: 'chat_template_kwargs',
     hint: 'OpenAI-compatible servers such as NVIDIA: model template options, as JSON.',
@@ -44,12 +52,13 @@ const defaultText = (defaults, key) =>
 let rowId = 0;
 const newRow = (key = '', value = '') => ({ id: ++rowId, key, value });
 
-/** Every known setting (its saved value, else its default), then any others. */
+/** Every known setting (its saved value, else its default if prefilled), then any others. */
 function rowsFromConfig(config, defaults) {
   const values = config && typeof config === 'object' ? config : {};
-  const known = KNOWN_SETTINGS.map((s) =>
-    newRow(s.key, s.key in values ? show(values[s.key]) : defaultText(defaults, s.key)),
-  );
+  const known = KNOWN_SETTINGS.map((s) => {
+    if (s.key in values) return newRow(s.key, show(values[s.key]));
+    return newRow(s.key, s.prefill ? defaultText(defaults, s.key) : '');
+  });
   const extra = Object.entries(values)
     .filter(([k]) => !KNOWN[k])
     .map(([k, v]) => newRow(k, show(v)));
@@ -101,37 +110,40 @@ function ConfigEditor({ rows, defaults, onChange }) {
       {rows.map((row) => {
         const key = row.key.trim();
         const known = KNOWN[key];
+        const fallback = known ? defaultText(defaults, key) : '';
+        const placeholder = fallback ? `default: ${fallback}` : (known?.unknown ?? 'value');
         return (
-          <div key={row.id}>
-            <div className="flex items-center gap-2">
-              <input
-                value={row.key}
-                onChange={(e) => update(row.id, 'key', e.target.value)}
-                placeholder="key"
-                aria-label="Setting key"
-                className={`${inputClass} w-48 shrink-0 font-mono`}
-              />
-              <input
-                value={row.value}
-                onChange={(e) => update(row.id, 'value', e.target.value)}
-                placeholder={known?.unknown ?? 'value'}
-                aria-label={`Value for ${row.key || 'new setting'}`}
-                className={`${inputClass} min-w-0 flex-1 font-mono`}
-              />
-              <button
-                type="button"
-                onClick={() => remove(row.id)}
-                aria-label={`Remove ${row.key || 'setting'}`}
-                title="Remove"
-                className="shrink-0 rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-              >
-                <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="size-4">
-                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-                </svg>
-              </button>
-            </div>
+          <div
+            key={row.id}
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 sm:grid-cols-[12rem_minmax(0,1fr)_auto]"
+          >
+            <input
+              value={row.key}
+              onChange={(e) => update(row.id, 'key', e.target.value)}
+              placeholder="key"
+              aria-label="Setting key"
+              className={`${inputClass} col-span-2 font-mono sm:col-span-1`}
+            />
+            <input
+              value={row.value}
+              onChange={(e) => update(row.id, 'value', e.target.value)}
+              placeholder={placeholder}
+              aria-label={`Value for ${row.key || 'new setting'}`}
+              className={`${inputClass} font-mono`}
+            />
+            <button
+              type="button"
+              onClick={() => remove(row.id)}
+              aria-label={`Remove ${row.key || 'setting'}`}
+              title="Remove"
+              className="rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            >
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="size-4">
+                <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+              </svg>
+            </button>
             {known && (
-              <p className="mt-1 pl-[12.5rem] text-xs text-gray-500 dark:text-gray-400">
+              <p className="col-span-2 text-xs text-gray-500 dark:text-gray-400 sm:col-start-2">
                 {known.hint}
               </p>
             )}
@@ -160,8 +172,7 @@ export function ManageChatSettings() {
   // Saving before the stored settings load would overwrite them with the
   // form's initial values (e.g. switch the provider to Anthropic).
   const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
+  const toast = useToast();
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -176,14 +187,12 @@ export function ManageChatSettings() {
         }
         setLoaded(true);
       })
-      .catch((err) => setError(err.message));
+      .catch((err) => toast.error(err.message || 'Could not load chat settings.'));
   }, [token]);
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!loaded) return;
-    setError('');
-    setSaved(false);
     setSubmitting(true);
     try {
       const config = configFromRows(configRows, defaults);
@@ -200,9 +209,9 @@ export function ManageChatSettings() {
       const nextDefaults = updated.defaults ?? FALLBACK_DEFAULTS;
       setDefaults(nextDefaults);
       setConfigRows(rowsFromConfig(updated.config, nextDefaults));
-      setSaved(true);
+      toast.success('Chat settings saved.');
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message || 'Could not save chat settings.');
     } finally {
       setSubmitting(false);
     }
@@ -274,9 +283,6 @@ export function ManageChatSettings() {
           </p>
           <ConfigEditor rows={configRows} defaults={defaults} onChange={setConfigRows} />
         </div>
-
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {saved && <p className="text-sm text-teal-700 dark:text-teal-400">Saved.</p>}
 
         <button
           type="submit"

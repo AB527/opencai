@@ -9,6 +9,7 @@ const WORKSPACE_SELECT = {
   csp: true,
   account: true,
   environment: true,
+  isActive: true,
   createdAt: true,
   credential: { select: { id: true, updatedAt: true } },
 };
@@ -23,13 +24,13 @@ async function createWorkspace(organisationId, { csp, account, environment }) {
   });
 }
 
-async function updateWorkspace(workspaceId, { account, environment }) {
+async function updateWorkspace(workspaceId, { account, environment, isActive }) {
   const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } });
   if (!workspace) throw new AppError(404, ERROR_CODES.NOT_FOUND);
 
   return prisma.workspace.update({
     where: { id: workspaceId },
-    data: { account, environment },
+    data: { account, environment, isActive },
     select: WORKSPACE_SELECT,
   });
 }
@@ -50,4 +51,25 @@ async function setWorkspaceCredential(workspaceId, credentialFields) {
   });
 }
 
-module.exports = { createWorkspace, updateWorkspace, setWorkspaceCredential };
+// Only an unused Workspace can be deleted: chat sessions require their
+// Workspace, and an Operator's history must not disappear with it. Its
+// credential is removed by the cascade; audit logs keep their rows.
+async function deleteWorkspace(organisationId, workspaceId) {
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } });
+  if (!workspace || workspace.organisationId !== organisationId) {
+    throw new AppError(404, ERROR_CODES.NOT_FOUND);
+  }
+
+  const chatCount = await prisma.chatSession.count({ where: { workspaceId } });
+  if (chatCount > 0) {
+    throw new AppError(
+      409,
+      ERROR_CODES.WORKSPACE_HAS_CHATS,
+      `This Workspace has ${chatCount} chat session${chatCount === 1 ? '' : 's'} and cannot be deleted.`,
+    );
+  }
+
+  await prisma.workspace.delete({ where: { id: workspaceId } });
+}
+
+module.exports = { createWorkspace, updateWorkspace, setWorkspaceCredential, deleteWorkspace };

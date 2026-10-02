@@ -5,5 +5,6 @@ const router = express.Router();
 
 router.get('/', controller.list);
 router.get('/:id/messages', controller.messages);
+router.delete('/:id', controller.remove);
 
 module.exports = router;

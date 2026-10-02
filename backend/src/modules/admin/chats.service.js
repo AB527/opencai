@@ -1,4 +1,5 @@
 const prisma = require('../../config/db');
+const sandboxManager = require('../../ai/sandbox/sandboxManager');
 const { AppError } = require('../../middleware/errorHandler');
 const { ERROR_CODES } = require('../../constants/errors');
 
@@ -12,12 +13,21 @@ async function listChatSessions({ userId, workspaceId, page, pageSize }) {
       where,
       select: {
         id: true,
+        title: true,
         mode: true,
         subMode: true,
         createdAt: true,
         updatedAt: true,
         user: { select: { id: true, username: true } },
-        workspace: { select: { id: true, account: true, environment: true, csp: true } },
+        workspace: {
+          select: {
+            id: true,
+            account: true,
+            environment: true,
+            csp: true,
+            organisation: { select: { name: true } },
+          },
+        },
         _count: { select: { messages: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -40,4 +50,22 @@ async function getChatSessionMessages(sessionId) {
   });
 }
 
-module.exports = { listChatSessions, getChatSessionMessages };
+// Deletes a chat and its messages (cascade); audit logs keep their rows with
+// the session link cleared. A still-running sandbox is stopped first so its
+// container isn't orphaned -- but an unreachable Docker never blocks the delete.
+async function deleteChatSession(sessionId) {
+  const session = await prisma.chatSession.findUnique({ where: { id: sessionId } });
+  if (!session) throw new AppError(404, ERROR_CODES.NOT_FOUND);
+
+  if (session.sandboxContainerId && session.sandboxStatus === 'ready') {
+    try {
+      await sandboxManager.destroySandbox(session);
+    } catch (err) {
+      console.warn(`[chats] could not stop sandbox for session ${sessionId}: ${err.message}`);
+    }
+  }
+
+  await prisma.chatSession.delete({ where: { id: sessionId } });
+}
+
+module.exports = { listChatSessions, getChatSessionMessages, deleteChatSession };

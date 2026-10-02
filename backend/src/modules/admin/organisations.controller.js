@@ -58,6 +58,15 @@ async function setWorkspaceCredential(req, res, next) {
   }
 }
 
+async function deleteWorkspace(req, res, next) {
+  try {
+    await workspaceService.deleteWorkspace(req.params.id, req.params.workspaceId);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   list,
   create,
@@ -66,4 +75,5 @@ module.exports = {
   createWorkspace,
   updateWorkspace,
   setWorkspaceCredential,
+  deleteWorkspace,
 };

@@ -22,6 +22,7 @@ router.patch(
   validate(updateWorkspaceSchema),
   controller.updateWorkspace,
 );
+router.delete('/:id/workspaces/:workspaceId', controller.deleteWorkspace);
 router.put(
   '/:id/workspaces/:workspaceId/credential',
   validate(workspaceCredentialSchema),

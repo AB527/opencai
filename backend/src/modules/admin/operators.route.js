@@ -9,5 +9,6 @@ router.get('/', controller.list);
 router.post('/', validate(createOperatorSchema), controller.create);
 router.patch('/:id', validate(updateOperatorSchema), controller.update);
 router.post('/:id/deactivate', controller.deactivate);
+router.delete('/:id', controller.remove);
 
 module.exports = router;

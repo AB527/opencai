@@ -92,4 +92,28 @@ async function deactivateOperator(userId) {
   return serialize(updated);
 }
 
-module.exports = { listOperators, createOperator, updateOperator, deactivateOperator };
+// Only an Operator without chat history can be deleted -- their sessions
+// reference them; deactivating keeps that history. Organisation links go with
+// the user (cascade); audit logs keep their rows.
+async function deleteOperator(userId) {
+  await findOperatorOrThrow(userId);
+
+  const chatCount = await prisma.chatSession.count({ where: { userId } });
+  if (chatCount > 0) {
+    throw new AppError(
+      409,
+      ERROR_CODES.OPERATOR_HAS_CHATS,
+      `This operator has ${chatCount} chat session${chatCount === 1 ? '' : 's'} and cannot be deleted. Deactivate them instead.`,
+    );
+  }
+
+  await prisma.user.delete({ where: { id: userId } });
+}
+
+module.exports = {
+  listOperators,
+  createOperator,
+  updateOperator,
+  deactivateOperator,
+  deleteOperator,
+};

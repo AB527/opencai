@@ -22,6 +22,7 @@ router.put(
   upload.fields([
     { name: 'logo', maxCount: 1 },
     { name: 'loginImage', maxCount: 1 },
+    { name: 'favicon', maxCount: 1 },
   ]),
   controller.update,
 );

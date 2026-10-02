@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import defaultLogo from '../assets/opencai-logo.png';
+import loginLogo from '../assets/opencai-login-logo.png';
 import { useAuth } from '../lib/AuthContext';
 import { login } from '../lib/authApi';
 import { useBranding } from '../lib/useBranding';
@@ -11,6 +12,8 @@ export function LoginPage() {
   const navigate = useNavigate();
   const branding = useBranding();
   const logo = branding.logoObjectKey || defaultLogo;
+  // The hero card uses a tightly cropped, larger copy of the default logo.
+  const heroLogo = branding.logoObjectKey || loginLogo;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -49,8 +52,8 @@ export function LoginPage() {
             <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:56px_56px]" />
           )}
           <div className="absolute inset-0 flex items-center justify-center p-8">
-            <div className="rounded-2xl bg-white px-10 py-8 shadow-xl">
-              <img src={logo} alt={branding.displayName} className="h-14 w-auto" />
+            <div className="aspect-square w-full max-w-md overflow-hidden rounded-2xl bg-white p-18 shadow-xl">
+              <img src={heroLogo} alt={branding.displayName} className="size-full object-contain" />
             </div>
           </div>
         </div>

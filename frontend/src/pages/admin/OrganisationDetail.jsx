@@ -6,151 +6,147 @@ import {
   updateOrganisation,
   createWorkspace,
   updateWorkspace,
+  deleteWorkspace,
   setWorkspaceCredential,
 } from '../../lib/adminApi';
+import { useToast } from '../../lib/ToastContext';
+import { ConfirmDialog, Field, FormDialog } from '../../components/Dialog';
+import { OrganisationDialog } from './ManageOrganisations';
 import { AdminLayout } from './AdminLayout';
 
 const CSP_OPTIONS = ['AWS'];
 
-function WorkspaceRow({ orgId, workspace, token, onChanged }) {
-  const [editingFields, setEditingFields] = useState(false);
-  const [account, setAccount] = useState(workspace.account);
-  const [environment, setEnvironment] = useState(workspace.environment);
+const workspaceLabel = (ws) => `${ws.csp} · ${ws.account} · ${ws.environment}`;
 
-  const [editingCredential, setEditingCredential] = useState(false);
+/** Adding a Workspace (with its cloud provider) or editing its account/environment. */
+function WorkspaceDialog({ workspace, busy, onSubmit, onClose }) {
+  const [csp, setCsp] = useState(workspace?.csp ?? CSP_OPTIONS[0]);
+  const [account, setAccount] = useState(workspace?.account ?? '');
+  const [environment, setEnvironment] = useState(workspace?.environment ?? '');
+  return (
+    <FormDialog
+      title={workspace ? 'Edit workspace' : 'Add workspace'}
+      submitLabel={workspace ? 'Save' : 'Add workspace'}
+      submitting={busy}
+      onSubmit={() =>
+        onSubmit(workspace ? { account, environment } : { csp, account, environment })
+      }
+      onClose={onClose}
+    >
+      {!workspace && (
+        <label className="block">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+            Cloud Provider
+          </span>
+          <select
+            value={csp}
+            onChange={(e) => setCsp(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+          >
+            {CSP_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <Field
+        label="Account"
+        required
+        value={account}
+        onChange={(e) => setAccount(e.target.value)}
+      />
+      <Field
+        label="Environment"
+        required
+        value={environment}
+        onChange={(e) => setEnvironment(e.target.value)}
+      />
+    </FormDialog>
+  );
+}
+
+function CredentialDialog({ workspace, busy, onSubmit, onClose }) {
   const [accessKeyId, setAccessKeyId] = useState('');
   const [secretAccessKey, setSecretAccessKey] = useState('');
-  const [error, setError] = useState('');
-
-  async function saveFields() {
-    setError('');
-    try {
-      await updateWorkspace(token, orgId, workspace.id, { account, environment });
-      setEditingFields(false);
-      onChanged();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function saveCredential(e) {
-    e.preventDefault();
-    setError('');
-    try {
-      await setWorkspaceCredential(token, orgId, workspace.id, { accessKeyId, secretAccessKey });
-      setEditingCredential(false);
-      setAccessKeyId('');
-      setSecretAccessKey('');
-      onChanged();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
-      <div className="flex items-center justify-between">
-        {editingFields ? (
-          <div className="flex flex-wrap items-end gap-2">
-            <div>
-              <label className="text-xs text-gray-500">Account</label>
-              <input
-                value={account}
-                onChange={(e) => setAccount(e.target.value)}
-                className="block rounded-lg border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500">Environment</label>
-              <input
-                value={environment}
-                onChange={(e) => setEnvironment(e.target.value)}
-                className="block rounded-lg border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={saveFields}
-              className="rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditingFields(false)}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-600 dark:text-gray-200"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <div>
-            <p className="font-medium text-gray-900 dark:text-gray-100">
-              {workspace.csp} &middot; {workspace.account} &middot; {workspace.environment}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Credentials:{' '}
-              {workspace.credential ? (
-                <span className="text-teal-700 dark:text-teal-400">set</span>
-              ) : (
-                <span className="text-amber-600">not set</span>
-              )}
-            </p>
-          </div>
-        )}
-        {!editingFields && (
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => setEditingFields(true)}
-              className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-400"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditingCredential((v) => !v)}
-              className="text-sm font-medium text-gray-600 hover:underline dark:text-gray-300"
-            >
-              {workspace.credential ? 'Replace credentials' : 'Attach credentials'}
-            </button>
-          </div>
-        )}
-      </div>
+    <FormDialog
+      title={workspace.credential ? 'Replace credentials' : 'Attach credentials'}
+      submitLabel="Save credentials"
+      submitting={busy}
+      onSubmit={() => onSubmit({ accessKeyId, secretAccessKey })}
+      onClose={onClose}
+    >
+      <p className="text-sm text-gray-600 dark:text-gray-300">
+        {workspaceLabel(workspace)}
+        {workspace.credential && ' — the saved credentials will be overwritten.'}
+      </p>
+      <Field
+        label="AWS Access Key ID"
+        required
+        autoComplete="off"
+        value={accessKeyId}
+        onChange={(e) => setAccessKeyId(e.target.value)}
+      />
+      <Field
+        label="AWS Secret Access Key"
+        type="password"
+        required
+        autoComplete="new-password"
+        value={secretAccessKey}
+        onChange={(e) => setSecretAccessKey(e.target.value)}
+      />
+    </FormDialog>
+  );
+}
 
-      {editingCredential && (
-        <form
-          onSubmit={saveCredential}
-          className="mt-3 flex flex-wrap items-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-800"
-        >
-          <div>
-            <label className="text-xs text-gray-500">AWS Access Key ID</label>
-            <input
-              required
-              value={accessKeyId}
-              onChange={(e) => setAccessKeyId(e.target.value)}
-              className="block rounded-lg border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500">AWS Secret Access Key</label>
-            <input
-              required
-              type="password"
-              value={secretAccessKey}
-              onChange={(e) => setSecretAccessKey(e.target.value)}
-              className="block rounded-lg border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-            />
-          </div>
-          <button
-            type="submit"
-            className="rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
-          >
-            Save
-          </button>
-        </form>
-      )}
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+function WorkspaceRow({ workspace, onAction }) {
+  const action = (type, label, className) => (
+    <button
+      type="button"
+      onClick={() => onAction(type, workspace)}
+      className={`text-sm font-medium hover:underline ${className}`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div
+      className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900 ${
+        workspace.isActive ? '' : 'opacity-70'
+      }`}
+    >
+      <div>
+        <p className="font-medium text-gray-900 dark:text-gray-100">
+          {workspaceLabel(workspace)}
+          {!workspace.isActive && (
+            <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+              Deactivated
+            </span>
+          )}
+        </p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Credentials:{' '}
+          {workspace.credential ? (
+            <span className="text-teal-700 dark:text-teal-400">set</span>
+          ) : (
+            <span className="text-amber-600">not set</span>
+          )}
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {action('edit', 'Edit', 'text-teal-700 dark:text-teal-400')}
+        {action(
+          'credential',
+          workspace.credential ? 'Replace credentials' : 'Attach credentials',
+          'text-gray-600 dark:text-gray-300',
+        )}
+        {workspace.isActive
+          ? action('deactivate', 'Deactivate', 'text-gray-600 dark:text-gray-300')
+          : action('reactivate', 'Reactivate', 'text-gray-600 dark:text-gray-300')}
+        {action('delete', 'Delete', 'text-red-600')}
+      </div>
     </div>
   );
 }
@@ -158,53 +154,38 @@ function WorkspaceRow({ orgId, workspace, token, onChanged }) {
 export function OrganisationDetail() {
   const { id } = useParams();
   const { token } = useAuth();
+  const toast = useToast();
   const [org, setOrg] = useState(null);
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [phone, setPhone] = useState('');
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
-
-  const [csp, setCsp] = useState(CSP_OPTIONS[0]);
-  const [account, setAccount] = useState('');
-  const [environment, setEnvironment] = useState('');
+  // { type: 'details' | 'addWorkspace' | 'edit' | 'credential' | 'deactivate'
+  //   | 'reactivate' | 'delete', workspace? }
+  const [dialog, setDialog] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   function refresh() {
-    getOrganisation(token, id).then((data) => {
-      setOrg(data);
-      setName(data.name);
-      setAddress(data.address || '');
-      setPhone(data.phone || '');
-    });
+    getOrganisation(token, id)
+      .then(setOrg)
+      .catch((err) => toast.error(err.message || 'Could not load the organisation.'));
   }
 
   useEffect(refresh, [token, id]);
 
-  async function handleSaveDetails(e) {
-    e.preventDefault();
-    setError('');
-    setSaved(false);
+  /** Runs a dialog's action; closes it on success, keeps it open on failure. */
+  async function run(action, success, failure) {
+    setBusy(true);
     try {
-      await updateOrganisation(token, id, { name, address: address || undefined, phone: phone || undefined });
-      setSaved(true);
+      await action();
+      toast.success(success);
+      setDialog(null);
       refresh();
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message || failure);
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function handleAddWorkspace(e) {
-    e.preventDefault();
-    setError('');
-    try {
-      await createWorkspace(token, id, { csp, account, environment });
-      setAccount('');
-      setEnvironment('');
-      refresh();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
+  const close = () => !busy && setDialog(null);
+  const ws = dialog?.workspace;
 
   if (!org) {
     return (
@@ -216,105 +197,148 @@ export function OrganisationDetail() {
 
   return (
     <AdminLayout title={org.name}>
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-50">{org.name}</h1>
-
-      <form
-        onSubmit={handleSaveDetails}
-        className="mt-6 flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900"
-      >
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Name</label>
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="mt-1 block rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Address</label>
-          <input
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            className="mt-1 block rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Phone</label>
-          <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="mt-1 block rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          />
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-50">{org.name}</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {[org.address, org.phone].filter(Boolean).join(' · ') || 'No contact details'}
+          </p>
         </div>
         <button
-          type="submit"
-          className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
+          type="button"
+          onClick={() => setDialog({ type: 'details' })}
+          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
         >
-          Save
+          Edit details
         </button>
-        {saved && <span className="text-sm text-teal-700 dark:text-teal-400">Saved.</span>}
-      </form>
-
-      <h2 className="mt-8 text-lg font-semibold text-gray-900 dark:text-gray-50">Workspaces</h2>
-      <div className="mt-3 space-y-3">
-        {org.workspaces.map((ws) => (
-          <WorkspaceRow key={ws.id} orgId={id} workspace={ws} token={token} onChanged={refresh} />
-        ))}
-        {org.workspaces.length === 0 && (
-          <p className="text-sm text-gray-400">No Workspaces yet.</p>
-        )}
       </div>
 
-      <form
-        onSubmit={handleAddWorkspace}
-        className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900"
-      >
-        <div>
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
-            Cloud Provider
-          </label>
-          <select
-            value={csp}
-            onChange={(e) => setCsp(e.target.value)}
-            className="mt-1 block rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          >
-            {CSP_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Account</label>
-          <input
-            required
-            value={account}
-            onChange={(e) => setAccount(e.target.value)}
-            className="mt-1 block rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
-            Environment
-          </label>
-          <input
-            required
-            value={environment}
-            onChange={(e) => setEnvironment(e.target.value)}
-            className="mt-1 block rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          />
-        </div>
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">Workspaces</h2>
         <button
-          type="submit"
+          type="button"
+          onClick={() => setDialog({ type: 'addWorkspace' })}
           className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
         >
-          Add Workspace
+          + Add workspace
         </button>
-      </form>
+      </div>
+      <div className="mt-3 space-y-3">
+        {org.workspaces.map((workspace) => (
+          <WorkspaceRow
+            key={workspace.id}
+            workspace={workspace}
+            onAction={(type, target) => setDialog({ type, workspace: target })}
+          />
+        ))}
+        {org.workspaces.length === 0 && <p className="text-sm text-gray-400">No Workspaces yet.</p>}
+      </div>
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {dialog?.type === 'details' && (
+        <OrganisationDialog
+          title="Edit organisation details"
+          initial={org}
+          busy={busy}
+          onClose={close}
+          onSubmit={(body) =>
+            run(
+              () => updateOrganisation(token, id, body),
+              'Organisation details saved.',
+              'Could not save the organisation details.',
+            )
+          }
+        />
+      )}
+      {dialog?.type === 'addWorkspace' && (
+        <WorkspaceDialog
+          busy={busy}
+          onClose={close}
+          onSubmit={(body) =>
+            run(
+              () => createWorkspace(token, id, body),
+              'Workspace added.',
+              'Could not add the workspace.',
+            )
+          }
+        />
+      )}
+      {dialog?.type === 'edit' && (
+        <WorkspaceDialog
+          workspace={ws}
+          busy={busy}
+          onClose={close}
+          onSubmit={(body) =>
+            run(
+              () => updateWorkspace(token, id, ws.id, body),
+              'Workspace saved.',
+              'Could not save the workspace.',
+            )
+          }
+        />
+      )}
+      {dialog?.type === 'credential' && (
+        <CredentialDialog
+          workspace={ws}
+          busy={busy}
+          onClose={close}
+          onSubmit={(body) =>
+            run(
+              () => setWorkspaceCredential(token, id, ws.id, body),
+              'Credentials saved.',
+              'Could not save the credentials.',
+            )
+          }
+        />
+      )}
+      {dialog?.type === 'deactivate' && (
+        <ConfirmDialog
+          title="Deactivate workspace?"
+          message={`${workspaceLabel(ws)} will be hidden from operators, and its chats can no longer run. Its chat history and credentials are kept, and you can reactivate it later.`}
+          confirmLabel="Deactivate"
+          busy={busy}
+          onClose={close}
+          onConfirm={() =>
+            run(
+              () => updateWorkspace(token, id, ws.id, { isActive: false }),
+              'Workspace deactivated.',
+              'Could not deactivate the workspace.',
+            )
+          }
+        />
+      )}
+      {dialog?.type === 'reactivate' && (
+        <ConfirmDialog
+          title="Reactivate workspace?"
+          message={`${workspaceLabel(ws)} will be available to operators again.`}
+          confirmLabel="Reactivate"
+          tone="primary"
+          busy={busy}
+          onClose={close}
+          onConfirm={() =>
+            run(
+              () => updateWorkspace(token, id, ws.id, { isActive: true }),
+              'Workspace reactivated.',
+              'Could not reactivate the workspace.',
+            )
+          }
+        />
+      )}
+      {dialog?.type === 'delete' && (
+        <ConfirmDialog
+          title="Delete workspace?"
+          message={`This permanently deletes ${workspaceLabel(ws)}, including its saved credentials. Workspaces with chat history can't be deleted; deactivate them instead.`}
+          confirmLabel="Delete"
+          busy={busy}
+          onClose={close}
+          onConfirm={() =>
+            run(
+              () => deleteWorkspace(token, id, ws.id),
+              'Workspace deleted.',
+              'Could not delete the workspace.',
+            )
+          }
+        />
+      )}
     </AdminLayout>
   );
 }

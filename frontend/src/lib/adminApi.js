@@ -16,6 +16,8 @@ export const updateOperator = (token, id, body) =>
   apiRequest(`/api/admin/operators/${id}`, { method: 'PATCH', token, body });
 export const deactivateOperator = (token, id) =>
   apiRequest(`/api/admin/operators/${id}/deactivate`, { method: 'POST', token });
+export const deleteOperator = (token, id) =>
+  apiRequest(`/api/admin/operators/${id}`, { method: 'DELETE', token });
 
 // Organisations + Workspaces
 export const listOrganisations = (token) => apiRequest('/api/admin/organisations', { token });
@@ -33,7 +35,12 @@ export const updateWorkspace = (token, orgId, workspaceId, body) =>
     token,
     body,
   });
-export const setWorkspaceCredential = (token, orgId, workspaceId, body) =>
+export const deleteWorkspace = (token, orgId, workspaceId) =>
+  apiRequest(`/api/admin/organisations/${orgId}/workspaces/${workspaceId}`, {
+    method: 'DELETE',
+    token,
+  });
+export const setWorkspaceCredential =(token, orgId, workspaceId, body) =>
   apiRequest(`/api/admin/organisations/${orgId}/workspaces/${workspaceId}/credential`, {
     method: 'PUT',
     token,
@@ -51,11 +58,12 @@ export const updateAgentPersona = (token, body) =>
 
 // Branding
 export const getBranding = () => apiRequest('/branding');
-export const updateBranding = (token, { displayName, logoFile, loginImageFile }) => {
+export const updateBranding = (token, { displayName, logoFile, loginImageFile, faviconFile }) => {
   const formData = new FormData();
   if (displayName !== undefined) formData.append('displayName', displayName);
   if (logoFile) formData.append('logo', logoFile);
   if (loginImageFile) formData.append('loginImage', loginImageFile);
+  if (faviconFile) formData.append('favicon', faviconFile);
   return apiRequest('/api/admin/branding', { method: 'PUT', token, body: formData });
 };
 
@@ -66,3 +74,5 @@ export const listChatSessions = (token, params = {}) => {
 };
 export const getChatSessionMessages = (token, id) =>
   apiRequest(`/api/admin/chats/${id}/messages`, { token });
+export const deleteChatSession = (token, id) =>
+  apiRequest(`/api/admin/chats/${id}`, { method: 'DELETE', token });

@@ -33,4 +33,13 @@ async function deactivate(req, res, next) {
   }
 }
 
-module.exports = { list, create, update, deactivate };
+async function remove(req, res, next) {
+  try {
+    await service.deleteOperator(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { list, create, update, deactivate, remove };

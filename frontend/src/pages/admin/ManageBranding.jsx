@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../lib/AuthContext';
 import { getBranding, updateBranding } from '../../lib/adminApi';
+import { applyFavicon } from '../../lib/useBranding';
+import { useToast } from '../../lib/ToastContext';
 import { AdminLayout } from './AdminLayout';
 
 export function ManageBranding() {
@@ -9,32 +11,35 @@ export function ManageBranding() {
   const [displayName, setDisplayName] = useState('');
   const [logoFile, setLogoFile] = useState(null);
   const [loginImageFile, setLoginImageFile] = useState(null);
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
+  const [faviconFile, setFaviconFile] = useState(null);
+  const toast = useToast();
   const [submitting, setSubmitting] = useState(false);
 
   function refresh() {
-    getBranding().then((data) => {
-      setCurrent(data);
-      setDisplayName(data.displayName);
-    });
+    getBranding()
+      .then((data) => {
+        setCurrent(data);
+        setDisplayName(data.displayName);
+        // Show a newly saved favicon in this tab without a reload.
+        applyFavicon(data.faviconObjectKey);
+      })
+      .catch((err) => toast.error(err.message || 'Could not load branding.'));
   }
 
   useEffect(refresh, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError('');
-    setSaved(false);
     setSubmitting(true);
     try {
-      await updateBranding(token, { displayName, logoFile, loginImageFile });
+      await updateBranding(token, { displayName, logoFile, loginImageFile, faviconFile });
       setLogoFile(null);
       setLoginImageFile(null);
-      setSaved(true);
+      setFaviconFile(null);
+      toast.success('Branding saved.');
       refresh();
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message || 'Could not save branding.');
     } finally {
       setSubmitting(false);
     }
@@ -95,8 +100,25 @@ export function ManageBranding() {
           />
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {saved && <p className="text-sm text-teal-700 dark:text-teal-400">Saved.</p>}
+        <div>
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+            Favicon (browser tab icon)
+          </label>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            A square image works best, e.g. 64×64 PNG, SVG or ICO.
+          </p>
+          <img
+            src={current?.faviconObjectKey || '/favicon.png'}
+            alt="Current favicon"
+            className="mt-2 size-8 rounded border border-gray-200 object-contain p-0.5 dark:border-gray-700"
+          />
+          <input
+            type="file"
+            accept="image/png,image/svg+xml,image/x-icon,image/vnd.microsoft.icon,image/*"
+            onChange={(e) => setFaviconFile(e.target.files?.[0] || null)}
+            className="mt-2 block w-full text-sm text-gray-700 dark:text-gray-200"
+          />
+        </div>
 
         <button
           type="submit"

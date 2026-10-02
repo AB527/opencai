@@ -77,6 +77,7 @@ function makeFullSession(over = {}) {
     workspace: {
       id: 'ws-1',
       csp: 'AWS',
+      isActive: true,
       credential: {
         id: 'cred-1',
         workspaceId: 'ws-1',
@@ -156,8 +157,32 @@ test('sendMessage: 404 when the session does not belong to the calling user (or 
   }
 });
 
+test('sendMessage: 403 when the workspace has been deactivated', async () => {
+  const base = makeFullSession();
+  const session = { ...base, workspace: { ...base.workspace, isActive: false } };
+  prisma.chatSession.findFirst = async () => session;
+  orchestrator.handleUserMessage = async () => {
+    throw new Error('should not be called');
+  };
+
+  try {
+    await assert.rejects(
+      () => service.sendMessage(USER_ID, SESSION_ID, 'hi'),
+      (err) => {
+        assert.equal(err.status, 403);
+        assert.equal(err.code, ERROR_CODES.WORKSPACE_INACTIVE);
+        return true;
+      },
+    );
+  } finally {
+    restoreAll();
+  }
+});
+
 test('sendMessage: 422 when the workspace has no WorkspaceCredential row', async () => {
-  const session = makeFullSession({ workspace: { id: 'ws-1', csp: 'AWS', credential: null } });
+  const session = makeFullSession({
+    workspace: { id: 'ws-1', csp: 'AWS', isActive: true, credential: null },
+  });
   prisma.chatSession.findFirst = async () => session;
   envelope.decrypt = () => {
     throw new Error('should not be called -- no credential to decrypt');
@@ -264,7 +289,9 @@ test('confirmPendingCommand: 404 when the session does not belong to the calling
 });
 
 test('confirmPendingCommand: 422 when the workspace has no WorkspaceCredential row', async () => {
-  const session = makeFullSession({ workspace: { id: 'ws-1', csp: 'AWS', credential: null } });
+  const session = makeFullSession({
+    workspace: { id: 'ws-1', csp: 'AWS', isActive: true, credential: null },
+  });
   prisma.chatSession.findFirst = async () => session;
   orchestrator.confirmCommand = async () => {
     throw new Error('should not be called');
@@ -362,7 +389,11 @@ test('cancelPendingCommand: 404 when the session does not belong to the calling 
 /* -------------------------------------------------------------------------- */
 
 function setupCreateSessionMocks({ personaCap, settingsDefault }) {
-  prisma.workspace.findUnique = async () => ({ id: 'ws-1', organisationId: 'org-1' });
+  prisma.workspace.findUnique = async () => ({
+    id: 'ws-1',
+    organisationId: 'org-1',
+    isActive: true,
+  });
   prisma.userOrganisation.findUnique = async () => ({ userId: USER_ID, organisationId: 'org-1' });
   // getPersona is imported into chat.service.js via destructuring, so it must
   // be driven through its own collaborator (prisma.agentPersona.findUnique)
@@ -386,6 +417,29 @@ function setupCreateSessionMocks({ personaCap, settingsDefault }) {
   };
   return () => capturedCreateData;
 }
+
+test('createSession: 403 in a deactivated workspace, and nothing is created', async () => {
+  const getData = setupCreateSessionMocks({ personaCap: 3, settingsDefault: 25 });
+  prisma.workspace.findUnique = async () => ({
+    id: 'ws-1',
+    organisationId: 'org-1',
+    isActive: false,
+  });
+
+  try {
+    await assert.rejects(
+      () => service.createSession(USER_ID, { workspaceId: 'ws-1', mode: 'AIOPS' }),
+      (err) => {
+        assert.equal(err.status, 403);
+        assert.equal(err.code, ERROR_CODES.WORKSPACE_INACTIVE);
+        return true;
+      },
+    );
+    assert.equal(getData(), undefined);
+  } finally {
+    restoreAll();
+  }
+});
 
 test('createSession: a persona with a non-null mutatingCommandCap wins over ChatSettings default', async () => {
   const getData = setupCreateSessionMocks({ personaCap: 3, settingsDefault: 25 });
