@@ -6,10 +6,12 @@ import {
   updateOperator,
   deactivateOperator,
   deleteOperator,
+  resetOperatorMfa,
   listOrganisations,
 } from '../../lib/adminApi';
 import { useToast } from '../../lib/ToastContext';
 import { ConfirmDialog, Field, FormDialog } from '../../components/Dialog';
+import { MfaBadge } from '../../components/MfaBadge';
 import { AdminLayout } from './AdminLayout';
 
 function OrgCheckboxes({ organisations, selected, onChange }) {
@@ -110,7 +112,7 @@ export function ManageOperators() {
   const toast = useToast();
   const [operators, setOperators] = useState(null);
   const [organisations, setOrganisations] = useState([]);
-  // { type: 'add' | 'orgs' | 'deactivate' | 'reactivate' | 'delete', operator? }
+  // { type: 'add' | 'orgs' | 'resetMfa' | 'deactivate' | 'reactivate' | 'delete', operator? }
   const [dialog, setDialog] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -171,13 +173,16 @@ export function ManageOperators() {
                       Deactivated
                     </span>
                   )}
+                  <span className="ml-2">
+                    <MfaBadge enrolled={operator.mfaEnrolled} />
+                  </span>
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {operator.organisations.map((o) => o.name).join(', ') ||
                     'No Organisations assigned'}
                 </p>
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={() => setDialog({ type: 'orgs', operator })}
@@ -185,6 +190,15 @@ export function ManageOperators() {
                 >
                   Edit Organisations
                 </button>
+                {operator.mfaEnrolled && (
+                  <button
+                    type="button"
+                    onClick={() => setDialog({ type: 'resetMfa', operator })}
+                    className="text-sm font-medium text-gray-600 hover:underline dark:text-gray-300"
+                  >
+                    Reset MFA
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() =>
@@ -266,6 +280,22 @@ export function ManageOperators() {
               () => updateOperator(token, op.id, { isActive: true }),
               `Operator "${op.username}" reactivated.`,
               'Could not reactivate the operator.',
+            )
+          }
+        />
+      )}
+      {dialog?.type === 'resetMfa' && (
+        <ConfirmDialog
+          title="Reset MFA?"
+          message={`"${op.username}"'s authenticator and backup codes stop working. They set up MFA again (scanning a new QR code) at their next sign-in.`}
+          confirmLabel="Reset MFA"
+          busy={busy}
+          onClose={close}
+          onConfirm={() =>
+            run(
+              () => resetOperatorMfa(token, op.id),
+              `MFA reset for "${op.username}".`,
+              'Could not reset MFA.',
             )
           }
         />

@@ -7,6 +7,8 @@ export const createAdministrator = (token, body) =>
   apiRequest('/api/admin/administrators', { method: 'POST', token, body });
 export const deleteAdministrator = (token, id) =>
   apiRequest(`/api/admin/administrators/${id}`, { method: 'DELETE', token });
+export const resetAdministratorMfa = (token, id) =>
+  apiRequest(`/api/admin/administrators/${id}/reset-mfa`, { method: 'POST', token });
 
 // Operators
 export const listOperators = (token) => apiRequest('/api/admin/operators', { token });
@@ -18,6 +20,8 @@ export const deactivateOperator = (token, id) =>
   apiRequest(`/api/admin/operators/${id}/deactivate`, { method: 'POST', token });
 export const deleteOperator = (token, id) =>
   apiRequest(`/api/admin/operators/${id}`, { method: 'DELETE', token });
+export const resetOperatorMfa = (token, id) =>
+  apiRequest(`/api/admin/operators/${id}/reset-mfa`, { method: 'POST', token });
 
 // Organisations + Workspaces
 export const listOrganisations = (token) => apiRequest('/api/admin/organisations', { token });

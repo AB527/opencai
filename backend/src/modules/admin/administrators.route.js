@@ -8,5 +8,6 @@ const router = express.Router();
 router.get('/', controller.list);
 router.post('/', validate(createAdministratorSchema), controller.create);
 router.delete('/:id', controller.remove);
+router.post('/:id/reset-mfa', controller.resetMfa);
 
 module.exports = router;

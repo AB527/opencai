@@ -3,6 +3,7 @@ const prisma = require('../../config/db');
 const { ROLES } = require('../../constants/roles');
 const { AppError } = require('../../middleware/errorHandler');
 const { ERROR_CODES } = require('../../constants/errors');
+const { clearMfa, mfaEnrolled } = require('./mfa');
 
 const BCRYPT_COST = 12;
 
@@ -11,6 +12,7 @@ const OPERATOR_SELECT = {
   username: true,
   isActive: true,
   createdAt: true,
+  totpSecretEncrypted: true,
   organisations: {
     select: { organisation: { select: { id: true, name: true } } },
   },
@@ -21,6 +23,7 @@ function serialize(user) {
     id: user.id,
     username: user.username,
     isActive: user.isActive,
+    mfaEnrolled: mfaEnrolled(user),
     createdAt: user.createdAt,
     organisations: user.organisations.map((uo) => uo.organisation),
   };
@@ -110,10 +113,18 @@ async function deleteOperator(userId) {
   await prisma.user.delete({ where: { id: userId } });
 }
 
+// The Operator sets MFA up again (new authenticator + backup codes) at their
+// next login -- e.g. after losing their phone.
+async function resetOperatorMfa(userId) {
+  await findOperatorOrThrow(userId);
+  await clearMfa(userId);
+}
+
 module.exports = {
   listOperators,
   createOperator,
   updateOperator,
   deactivateOperator,
   deleteOperator,
+  resetOperatorMfa,
 };

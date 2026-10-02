@@ -15,7 +15,7 @@ get_env_var() {
 }
 
 BACKEND_PORT="$(get_env_var "$SCRIPT_DIR/backend/.env" PORT)"
-BACKEND_PORT="${BACKEND_PORT:-4000}"
+BACKEND_PORT="${BACKEND_PORT:-5271}"
 
 FRONTEND_PORT="${FRONTEND_PORT:-5270}"
 

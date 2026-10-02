@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../lib/AuthContext';
-import { listAdministrators, createAdministrator, deleteAdministrator } from '../../lib/adminApi';
+import {
+  listAdministrators,
+  createAdministrator,
+  deleteAdministrator,
+  resetAdministratorMfa,
+} from '../../lib/adminApi';
+import { MfaBadge } from '../../components/MfaBadge';
 import { useToast } from '../../lib/ToastContext';
 import { ConfirmDialog, Field, FormDialog } from '../../components/Dialog';
 import { AdminLayout } from './AdminLayout';
@@ -35,10 +41,12 @@ function AddAdministratorDialog({ busy, onSubmit, onClose }) {
 }
 
 export function ManageAdministrators() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const toast = useToast();
   const [admins, setAdmins] = useState(null);
-  // { type: 'add' } | { type: 'delete', admin }
+  // Only the master admin may reset administrators' MFA (the backend enforces it).
+  const iAmMaster = Boolean(admins?.some((a) => a.id === user?.id && a.isMasterAdmin));
+  // { type: 'add' } | { type: 'delete' | 'resetMfa', admin }
   const [dialog, setDialog] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -87,6 +95,7 @@ export function ManageAdministrators() {
           <thead className="bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
             <tr>
               <th className="px-4 py-2 font-medium">Username</th>
+              <th className="px-4 py-2 font-medium">MFA</th>
               <th className="px-4 py-2 font-medium">Created</th>
               <th className="px-4 py-2 font-medium"></th>
             </tr>
@@ -102,25 +111,39 @@ export function ManageAdministrators() {
                     </span>
                   )}
                 </td>
+                <td className="px-4 py-2">
+                  <MfaBadge enrolled={admin.mfaEnrolled} />
+                </td>
                 <td className="px-4 py-2 text-gray-500 dark:text-gray-400">
                   {new Date(admin.createdAt).toLocaleDateString()}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  {!admin.isMasterAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => setDialog({ type: 'delete', admin })}
-                      className="text-sm font-medium text-red-600 hover:underline"
-                    >
-                      Remove
-                    </button>
-                  )}
+                  <div className="flex justify-end gap-3">
+                    {iAmMaster && admin.mfaEnrolled && (
+                      <button
+                        type="button"
+                        onClick={() => setDialog({ type: 'resetMfa', admin })}
+                        className="text-sm font-medium text-gray-600 hover:underline dark:text-gray-300"
+                      >
+                        Reset MFA
+                      </button>
+                    )}
+                    {!admin.isMasterAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setDialog({ type: 'delete', admin })}
+                        className="text-sm font-medium text-red-600 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
             {admins?.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
                   No administrators yet.
                 </td>
               </tr>
@@ -154,6 +177,26 @@ export function ManageAdministrators() {
               () => deleteAdministrator(token, dialog.admin.id),
               `Administrator "${dialog.admin.username}" deleted.`,
               'Could not delete the administrator.',
+            )
+          }
+        />
+      )}
+      {dialog?.type === 'resetMfa' && (
+        <ConfirmDialog
+          title="Reset MFA?"
+          message={
+            dialog.admin.id === user?.id
+              ? 'Your authenticator and backup codes stop working. You stay signed in now, and set up MFA again at your next sign-in.'
+              : `"${dialog.admin.username}"'s authenticator and backup codes stop working. They set up MFA again at their next sign-in.`
+          }
+          confirmLabel="Reset MFA"
+          busy={busy}
+          onClose={close}
+          onConfirm={() =>
+            run(
+              () => resetAdministratorMfa(token, dialog.admin.id),
+              `MFA reset for "${dialog.admin.username}".`,
+              'Could not reset MFA.',
             )
           }
         />

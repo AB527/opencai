@@ -78,3 +78,38 @@ test('deleteOperator: 404 for a user who is not an Operator', async () => {
     restoreAll();
   }
 });
+
+test('resetOperatorMfa: clears the TOTP secret and backup codes', async () => {
+  const originalUpdate = prisma.user.update;
+  let capturedArgs;
+  mockUser();
+  prisma.user.update = async (args) => {
+    capturedArgs = args;
+  };
+  try {
+    await service.resetOperatorMfa(USER_ID);
+    assert.deepEqual(capturedArgs, {
+      where: { id: USER_ID },
+      data: { totpSecretEncrypted: null, backupCodesHashed: [] },
+    });
+  } finally {
+    prisma.user.update = originalUpdate;
+    restoreAll();
+  }
+});
+
+test('resetOperatorMfa: 404 for a user who is not an Operator', async () => {
+  const originalUpdate = prisma.user.update;
+  let updated = false;
+  mockUser({ role: ROLES.ADMIN });
+  prisma.user.update = async () => {
+    updated = true;
+  };
+  try {
+    await assert.rejects(service.resetOperatorMfa(USER_ID), { status: 404 });
+    assert.equal(updated, false);
+  } finally {
+    prisma.user.update = originalUpdate;
+    restoreAll();
+  }
+});

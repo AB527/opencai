@@ -4,6 +4,7 @@ const { ROLES } = require('../../constants/roles');
 const { MASTER_ADMIN_USERNAME } = require('../../constants/admin');
 const { AppError } = require('../../middleware/errorHandler');
 const { ERROR_CODES } = require('../../constants/errors');
+const { clearMfa, mfaEnrolled } = require('./mfa');
 
 const BCRYPT_COST = 12;
 
@@ -12,10 +13,15 @@ const ADMIN_SELECT = {
   username: true,
   isActive: true,
   createdAt: true,
+  totpSecretEncrypted: true,
 };
 
-function serialize(user) {
-  return { ...user, isMasterAdmin: user.username === MASTER_ADMIN_USERNAME };
+function serialize({ totpSecretEncrypted, ...user }) {
+  return {
+    ...user,
+    isMasterAdmin: user.username === MASTER_ADMIN_USERNAME,
+    mfaEnrolled: mfaEnrolled({ totpSecretEncrypted }),
+  };
 }
 
 async function listAdministrators() {
@@ -52,4 +58,26 @@ async function deleteAdministrator(userId) {
   await prisma.user.delete({ where: { id: userId } });
 }
 
-module.exports = { listAdministrators, createAdministrator, deleteAdministrator };
+// Only the master admin may reset an Administrator's MFA -- any other admin's
+// and their own. Other admins can still reset Operators' MFA.
+async function resetAdministratorMfa(actor, userId) {
+  if (actor.username !== MASTER_ADMIN_USERNAME) {
+    throw new AppError(
+      403,
+      ERROR_CODES.FORBIDDEN,
+      "Only the master admin can reset an administrator's MFA.",
+    );
+  }
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || user.role !== ROLES.ADMIN) {
+    throw new AppError(404, ERROR_CODES.NOT_FOUND);
+  }
+  await clearMfa(userId);
+}
+
+module.exports = {
+  listAdministrators,
+  createAdministrator,
+  deleteAdministrator,
+  resetAdministratorMfa,
+};

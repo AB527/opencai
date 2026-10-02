@@ -449,7 +449,7 @@ function anchors(x, y, w, h) {
     [350, 64, ['Install dependencies', { t: 'npm install   (in backend/ and frontend/)', style: 'mono' }]],
     [450, 84, ['Prepare the database', { t: 'npx prisma migrate deploy  ·  npm run prisma:seed', style: 'mono' }, 'the seed creates the master admin and the default agent personas']],
     [570, 64, ['Build the sandbox image', { t: 'docker build -t opencai-sandbox:2.15.30 backend/sandbox', style: 'mono' }]],
-    [670, 64, ['Start the app', { t: './dev.sh   →   API :4000   ·   web app :5270', style: 'mono' }]],
+    [670, 64, ['Start the app', { t: './dev.sh   →   API :5271   ·   web app :5270', style: 'mono' }]],
     [770, 64, ['First admin sign-in', 'sign in as the master admin · enrol MFA · change the default password']],
     [870, 84, ['Configure the platform', 'Chat Settings: provider, model, API key', 'Organisations: workspaces + AWS credentials · Operators: create and assign']],
   ];

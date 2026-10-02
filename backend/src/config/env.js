@@ -43,7 +43,7 @@ function loadConfig() {
   // When unset, falls back to the existing NODE_ENV-based behavior.
   const corsOrigin = process.env.CORS_ORIGIN || undefined;
 
-  const rawPort = process.env.PORT || '4000';
+  const rawPort = process.env.PORT || '5271';
   const port = Number(rawPort);
   if (!Number.isInteger(port) || port <= 0) {
     errors.push(`PORT must be a positive integer, got "${rawPort}"`);

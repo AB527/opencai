@@ -42,4 +42,13 @@ async function remove(req, res, next) {
   }
 }
 
-module.exports = { list, create, update, deactivate, remove };
+async function resetMfa(req, res, next) {
+  try {
+    await service.resetOperatorMfa(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { list, create, update, deactivate, remove, resetMfa };
