@@ -16,16 +16,19 @@ services:
     networks: [opencai]
 
   minio:
-    image: minio/minio
+    # MinIO no longer publishes `minio/minio` (or `minio/mc`) on Docker Hub;
+    # Chainguard's image is a current build of the same server and takes the
+    # same command and environment variables.
+    image: cgr.dev/chainguard/minio:latest
     environment:
       MINIO_ROOT_USER: opencai
       MINIO_ROOT_PASSWORD: opencai12345
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
-    # Recent minio/minio images don't ship curl, so a curl-based healthcheck
-    # can never pass; `mc` is bundled in the image and is MinIO's own
-    # documented healthcheck form.
+    # The image doesn't ship curl, so a curl-based healthcheck can never
+    # pass; `mc` is bundled in the image and is MinIO's own documented
+    # healthcheck form.
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
@@ -44,8 +47,10 @@ services:
   # default restart policy ("no") means it never restarts once it has
   # completed, so this only ever runs its two `mc` commands once per volume
   # lifetime (`mc mb --ignore-existing` also makes a second run harmless).
+  # Reuses the server image because it bundles both `mc` and a shell
+  # (Chainguard's separate minio-client image has no shell).
   minio-init:
-    image: minio/mc
+    image: cgr.dev/chainguard/minio:latest
     depends_on:
       minio:
         condition: service_healthy

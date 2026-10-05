@@ -83,7 +83,7 @@ docker run -d --name opencai-postgres -p 5432:5432 \
 
 docker run -d --name opencai-minio -p 9000:9000 -p 9001:9001 \
   -e MINIO_ROOT_USER=opencai -e MINIO_ROOT_PASSWORD=opencai12345 \
-  minio/minio server /data --console-address ":9001"
+  cgr.dev/chainguard/minio:latest server /data --console-address ":9001"
 ```
 
 Then open the MinIO console at http://localhost:9001, sign in with that user and password, and
