@@ -1,16 +1,24 @@
-// Generates the workflow diagrams in docs/workflows/ as SVG.
+// Generates the workflow diagrams in docs/workflows/ as PNG.
 //
 //   node docs/workflows/src/build.mjs
+//
+// Each figure is drawn as SVG, rendered to a 2x PNG with headless Chrome, and
+// the SVG is then removed. Set CHROME to the browser binary if it is not found;
+// without one the SVGs are left in place instead.
 //
 // Layout is explicit (coordinates per diagram) so the drawings stay exact and
 // quiet: ink on paper, one muted accent for "stops here" paths. Keep the
 // diagrams in step with the code they describe -- each figure names its source.
 
-import { writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
+// Every saved diagram, so the PNG pass at the end knows each one's size.
+const SAVED = [];
 
 const C = {
   paper: '#fbfaf7',
@@ -161,7 +169,7 @@ class Diagram {
 
   save() {
     writeFileSync(join(OUT_DIR, `${this.file}.svg`), this.render());
-    console.log(`wrote ${this.file}.svg`);
+    SAVED.push(this);
   }
 }
 
@@ -268,7 +276,7 @@ function anchors(x, y, w, h) {
   d.arrow([s5.b, l1.t]);
   const q = d.diamond(X + W / 2, 912, 230, 90, ['Answer or', 'tool call?']);
   d.arrow([l1.b, q.t]);
-  const cmd = d.box(680, 881, 340, 62, ['Command decision', 'classify, then run, reject or park — Fig. 3']);
+  const cmd = d.box(680, 881, 340, 62, ['Command decision', 'classify, then run, reject or park — Fig. 4']);
   d.arrow([q.r, cmd.l], { label: 'tool call', labelAt: [612, q.cy - 8] });
   d.arrow([cmd.t, [cmd.cx, l1.cy], l1.r], {
     dashed: true,
@@ -280,7 +288,7 @@ function anchors(x, y, w, h) {
 
   const s6 = d.box(X, 1092, W, 62, ['Save the answer and context usage', 'tokens used ÷ context window → the header ring']);
   d.arrow([q.b, s6.t], { label: 'answer', labelAt: [X + W / 2 + 10, 992], anchor: 'start' });
-  const park = d.box(680, 1092, 340, 62, ['Waits for the Operator', 'Confirm / Cancel card — Fig. 4']);
+  const park = d.box(680, 1092, 340, 62, ['Waits for the Operator', 'Confirm / Cancel card — Fig. 5']);
   d.arrow([cmd.b, park.t], { label: 'needs confirmation', labelAt: [cmd.cx + 10, 1076], anchor: 'start' });
   const t1 = d.box(X, 1192, W, 44, ['Reply shown: Thought dropdown + answer'], { kind: 'terminal' });
   d.arrow([s6.b, t1.t]);
@@ -288,14 +296,122 @@ function anchors(x, y, w, h) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Fig. 3 — How a command is decided                                           */
+/* Fig. 3 — How the agent arrives at a command                                 */
 /* -------------------------------------------------------------------------- */
 {
   const d = new Diagram({
-    file: '03-command-decision',
+    file: '03-command-creation',
+    width: 1180,
+    height: 1000,
+    fig: 3,
+    title: 'How the agent arrives at a command',
+    subtitle: 'There is no command catalogue or help map. The model writes the AWS CLI command itself and checks the real CLI when unsure.',
+    source: 'backend/src/ai/orchestrator.js, backend/src/ai/prompts, backend/src/ai/providers',
+  });
+
+  d.frame(60, 130, 350, 400, 'SENT TO THE MODEL ON EVERY CALL');
+  d.box(85, 165, 300, 62, ['Persona prompt', 'per mode or FinOps sub-mode, from the database']);
+  d.box(85, 247, 300, 62, ['Tool rules', 'how to call tools, retry and use regions']);
+  d.box(85, 329, 300, 84, ['Two tools', { t: 'run_lookup(command)', style: 'mono' }, { t: 'run_command(command, explanation)', style: 'mono' }]);
+  d.box(85, 433, 300, 62, ['Conversation', 'the request · earlier commands and results']);
+  d.note(60, 562, ['Nothing here lists the commands that exist:', 'which command to use is the model’s own knowledge.']);
+
+  const X = 460;
+  const W = 340;
+  const CX = X + W / 2;
+  const t0 = d.box(X, 130, W, 44, ['Operator asks in plain language'], { kind: 'terminal' });
+  const m1 = d.box(X, 214, W, 62, ['Model drafts a command', 'from what it already knows of the AWS CLI']);
+  d.arrow([t0.b, m1.t]);
+  d.arrow([[410, m1.cy - 12], [X, m1.cy - 12]]);
+
+  const q1 = d.diamond(CX, 346, 240, 84, ['Sure of the', 'syntax?']);
+  d.arrow([m1.b, q1.t]);
+  const l1 = d.box(860, 315, 270, 62, ['Look it up: run_lookup', { t: 'aws <service> <operation> help', style: 'mono' }]);
+  d.arrow([q1.r, l1.l], { label: 'no', labelAt: [808, q1.cy - 8] });
+  const l2 = d.box(860, 417, 270, 78, ['Help page from the real CLI', 'run in the sandbox · no web search', 'first 6,000 characters go to the model']);
+  d.arrow([l1.b, l2.t]);
+  d.note(860, 522, ['The lookup in detail — Fig. 3.1']);
+  d.arrow([l2.r, [1155, l2.cy], [1155, m1.cy], m1.r], {
+    dashed: true,
+    label: 'help text fed back',
+    labelAt: [975, m1.cy - 8],
+  });
+
+  const p1 = d.box(X, 440, W, 62, ['Propose it: run_command', 'the exact command + a plain-language explanation']);
+  d.arrow([q1.b, p1.t], { label: 'yes', labelAt: [CX + 10, 420], anchor: 'start' });
+  const p2 = d.box(X, 540, W, 62, ['Command policy', 'run, park for confirmation, or reject — Fig. 4']);
+  d.arrow([p1.b, p2.t]);
+  const q2 = d.diamond(CX, 690, 240, 84, ['Did it run', 'and succeed?']);
+  d.arrow([p2.b, q2.t]);
+
+  const r1 = d.box(85, 659, 300, 62, ['Error or refusal goes back', 'the model corrects the command, or looks it up'], { kind: 'stop' });
+  d.arrow([q2.l, r1.r], { accent: true, label: 'no', labelAt: [448, q2.cy - 8] });
+  d.arrow([r1.t, [r1.cx, 622], [435, 622], [435, m1.cy + 14], [X, m1.cy + 14]], {
+    accent: true,
+    dashed: true,
+    label: 'try again',
+    labelAt: [335, 614],
+  });
+
+  const a1 = d.box(X, 782, W, 62, ['Sanitised output goes back to the model', 'more commands if needed — at most 8 model calls']);
+  d.arrow([q2.b, a1.t], { label: 'yes', labelAt: [CX + 10, 762], anchor: 'start' });
+  const t1 = d.box(X, 882, W, 44, ['Model answers in plain language'], { kind: 'terminal' });
+  d.arrow([a1.b, t1.t]);
+  d.save();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Fig. 3.1 — How a documentation lookup runs                                  */
+/* -------------------------------------------------------------------------- */
+{
+  const d = new Diagram({
+    file: '03-1-command-lookup',
+    width: 1180,
+    height: 980,
+    fig: '3.1',
+    title: 'How a documentation lookup runs',
+    subtitle: 'run_lookup reads the AWS CLI’s own help inside the sandbox. It passes the same policy as every other command.',
+    source: 'backend/src/ai/orchestrator.js, backend/src/ai/policy/commandPolicy.js',
+  });
+
+  const X = 420;
+  const W = 380;
+  const CX = X + W / 2;
+  const t0 = d.box(X, 130, W, 44, ['The model calls run_lookup'], { kind: 'terminal' });
+  const s1 = d.box(X, 210, W, 62, ['The command it sends', { t: 'aws ec2 describe-instances help', style: 'mono' }]);
+  const s2 = d.box(X, 308, W, 62, ['Command policy checks it first', 'parse · no shell operators · binary on the allowlist']);
+  d.arrow([t0.b, s1.t]);
+  d.arrow([s1.b, s2.t]);
+  const e = d.box(900, 308, 232, 62, ['Rejected', 'the reason goes back to the model'], { kind: 'stop' });
+  d.arrow([s2.r, e.l], { accent: true, label: 'fails a check', labelAt: [850, s2.cy - 8] });
+
+  const q = d.diamond(CX, 452, 240, 84, ['A help', 'request?']);
+  d.arrow([s2.b, q.t]);
+  d.note(770, 428, ['Counts as help:', 'aws help · aws <service> help', 'aws <service> <operation> help', 'or any command with --help']);
+  const o = d.box(60, 421, 290, 62, ['Treated as an ordinary command', 'read-only runs now · mutating waits — Fig. 4'], { kind: 'outcome' });
+  d.arrow([q.l, o.r], { label: 'no', labelAt: [420, q.cy - 8] });
+
+  const s3 = d.box(X, 546, W, 62, ['Run in the session sandbox', 'help text bundled with the CLI · no confirmation needed']);
+  d.arrow([q.b, s3.t], { label: 'yes', labelAt: [CX + 10, 526], anchor: 'start' });
+  const s4 = d.box(X, 644, W, 62, ['Sanitise, save and audit', 'secrets redacted · chat history · audit log']);
+  const s5 = d.box(X, 742, W, 78, ['Shorten for the model', 'the newest result keeps its first 6,000 characters', 'older results shrink to 1,500']);
+  const t1 = d.box(X, 858, W, 44, ['Help text returned to the model — Fig. 3'], { kind: 'terminal' });
+  d.arrow([s3.b, s4.t]);
+  d.arrow([s4.b, s5.t]);
+  d.arrow([s5.b, t1.t]);
+  d.note(60, 770, ['The full help page stays in the chat history;', 'only the copy sent to the model is shortened.']);
+  d.save();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Fig. 4 — How a command is decided                                           */
+/* -------------------------------------------------------------------------- */
+{
+  const d = new Diagram({
+    file: '04-command-decision',
     width: 1180,
     height: 1480,
-    fig: 3,
+    fig: 4,
     title: 'How a proposed command is decided',
     subtitle: 'Every command the model proposes passes these checks, in order. Nothing unrecognised runs.',
     source: 'backend/src/ai/policy/commandPolicy.js, backend/src/ai/orchestrator.js',
@@ -345,7 +461,7 @@ function anchors(x, y, w, h) {
 
   const lookup = d.box(40, boxes[4].y, 190, H, ['Lookup', 'documentation · runs now'], { kind: 'outcome' });
   d.arrow([boxes[4].l, lookup.r], { label: 'yes', labelAt: [260, boxes[4].cy - 8] });
-  const confirm = d.box(40, boxes[6].y, 190, H, ['Needs confirmation', 'the Operator decides — Fig. 4'], { kind: 'outcome' });
+  const confirm = d.box(40, boxes[6].y, 190, H, ['Needs confirmation', 'the Operator decides — Fig. 5'], { kind: 'outcome' });
   d.arrow([boxes[6].l, confirm.r], { label: 'yes', labelAt: [260, boxes[6].cy - 8] });
 
   const runs = d.box(X, 1010, W, 60, ['Runs now, no human in the loop', 'lookups and read-only commands']);
@@ -371,14 +487,14 @@ function anchors(x, y, w, h) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Fig. 4 — Commands that change resources                                     */
+/* Fig. 5 — Commands that change resources                                     */
 /* -------------------------------------------------------------------------- */
 {
   const d = new Diagram({
-    file: '04-confirmation',
+    file: '05-confirmation',
     width: 1100,
     height: 1220,
-    fig: 4,
+    fig: 5,
     title: 'Commands that change resources',
     subtitle: 'A mutating command never runs until the Operator confirms it — and it is checked again when they do.',
     source: 'backend/src/ai/orchestrator.js — confirmCommand, cancelCommand',
@@ -428,14 +544,14 @@ function anchors(x, y, w, h) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Fig. 5 — Local setup                                                        */
+/* Fig. 6 — Local setup                                                        */
 /* -------------------------------------------------------------------------- */
 {
   const d = new Diagram({
-    file: '05-local-setup',
+    file: '06-local-setup',
     width: 1180,
     height: 1140,
-    fig: 5,
+    fig: 6,
     title: 'Setting up OpenCAI locally',
     subtitle: 'From a fresh clone to an Operator chatting with their AWS account.',
     source: 'README.md, dev.sh, docker-compose.yml, backend/prisma/seed.js',
@@ -482,14 +598,14 @@ function anchors(x, y, w, h) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Fig. 6 — Signing in                                                         */
+/* Fig. 7 — Signing in                                                         */
 /* -------------------------------------------------------------------------- */
 {
   const d = new Diagram({
-    file: '06-sign-in-and-mfa',
+    file: '07-sign-in-and-mfa',
     width: 1120,
     height: 1200,
-    fig: 6,
+    fig: 7,
     title: 'Signing in',
     subtitle: 'Password first, then a one-time code. The session token is only issued after both.',
     source: 'backend/src/modules/auth/auth.service.js',
@@ -537,14 +653,14 @@ function anchors(x, y, w, h) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Fig. 7 — Releasing                                                          */
+/* Fig. 8 — Releasing                                                          */
 /* -------------------------------------------------------------------------- */
 {
   const d = new Diagram({
-    file: '07-release',
+    file: '08-release',
     width: 1180,
     height: 820,
-    fig: 7,
+    fig: 8,
     title: 'Releasing a version',
     subtitle: 'Work lands on dev; merging into release publishes a version and its images.',
     source: '.github/workflows/ci.yml, .github/workflows/release.yml, .releaserc.json',
@@ -576,4 +692,52 @@ function anchors(x, y, w, h) {
   const t = d.box(L, b3.cy - 22, LW, 44, ['Pull a released image and run it'], { kind: 'terminal' });
   d.arrow([b3.l, t.r], { dashed: true, label: 'published', labelAt: [540, b3.cy - 8] });
   d.save();
+}
+
+/* -------------------------------------------------------------------------- */
+/* PNG pass                                                                    */
+/* -------------------------------------------------------------------------- */
+function findChrome() {
+  const candidates = [
+    process.env.CHROME,
+    'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+  ];
+  return candidates.find((c) => c && existsSync(c));
+}
+
+{
+  const chrome = findChrome();
+  if (!chrome) {
+    console.warn('No Chrome found (set CHROME): left the SVGs in place, no PNGs written.');
+  } else {
+    // Its own profile, so it never hands the job to a browser that is already open.
+    const profile = mkdtempSync(join(tmpdir(), 'opencai-workflows-'));
+    for (const d of SAVED) {
+      const svg = join(OUT_DIR, `${d.file}.svg`);
+      const png = join(OUT_DIR, `${d.file}.png`);
+      const run = spawnSync(chrome, [
+        '--headless=new',
+        '--hide-scrollbars',
+        '--disable-gpu',
+        '--force-device-scale-factor=2',
+        `--user-data-dir=${profile}`,
+        `--window-size=${d.width},${d.height}`,
+        `--screenshot=${png}`,
+        pathToFileURL(svg).href,
+      ]);
+      if (run.status !== 0 || !existsSync(png)) {
+        console.warn(`could not render ${d.file}.png; kept ${d.file}.svg`);
+        continue;
+      }
+      unlinkSync(svg);
+      console.log(`wrote ${d.file}.png`);
+    }
+    rmSync(profile, { recursive: true, force: true });
+  }
 }
