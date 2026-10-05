@@ -1,6 +1,7 @@
 {
   "name": "opencai-release-tooling",
   "private": true,
+  "license": "FSL-1.1-ALv2",
   "version": "0.0.0",
   "description": "Release automation config for OpenCAI (semantic-release). App code lives in frontend/ and backend/, each with its own package.json and version.",
   "devDependencies": {

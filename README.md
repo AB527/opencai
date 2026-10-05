@@ -18,7 +18,7 @@ FinOps platform: ask in plain language, see the exact command, approve it, and i
 - **Secure.** MFA sign-in, encrypted cloud credentials, and a full audit trail of every action.
 - **Your model, your brand.** Works with Anthropic, OpenAI, Gemini, Groq and NVIDIA. Add your own
   name and logo.
-- **Yours to host.** Open source, runs on your own machine or server. Works with AWS today.
+- **Yours to host.** Source-available, runs on your own machine or server. Works with AWS today.
 
 ## Quick start
 
@@ -56,3 +56,13 @@ change the password after that.
 - [Architecture and guardrails](PLAN.md)
 - [Contributing](CONTRIBUTING.md)
 - [Releases](docs/RELEASES.md)
+
+## License
+
+OpenCAI is licensed under the [Functional Source License 1.1, ALv2 Future License](LICENSE.md)
+(FSL-1.1-ALv2). You can use, modify and redistribute it for any purpose except offering it to
+others as a competing commercial product or service. Each release becomes available under
+Apache 2.0 two years after it is published.
+
+The OpenCAI name and logo are not covered by this license and may not be used for derived
+products.
